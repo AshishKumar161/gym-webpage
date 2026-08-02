@@ -1,0 +1,89 @@
+/* =========================================
+   A² ReVamp Gym — Luxury Design System Variables
+   ========================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  /* Theme Colors (Dark Mode Default) */
+  --bg-main: #08090d;
+  --bg-surface: #0e1118;
+  --bg-surface-2: #141824;
+  --bg-card: rgba(18, 22, 33, 0.7);
+  --bg-card-hover: rgba(26, 32, 48, 0.85);
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.15);
+  --border-glow: rgba(79, 142, 247, 0.35);
+
+  /* Primary Cyber Accents */
+  --accent: #3b82f6;
+  --accent-cyan: #06b6d4;
+  --accent-hover: #2563eb;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+  --accent-glow: 0 0 30px rgba(59, 130, 246, 0.35);
+
+  --green: #10b981;
+  --green-soft: rgba(16, 185, 129, 0.12);
+  --whatsapp: #25d366;
+  --whatsapp-soft: rgba(37, 211, 102, 0.12);
+  --amber: #f59e0b;
+  --red: #ef4444;
+
+  /* Glassmorphism System */
+  --glass-bg: rgba(15, 18, 28, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  --blur-amount: blur(20px);
+
+  /* Typography */
+  --font-display: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Radius Tokens */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 25px 60px rgba(0, 0, 0, 0.6);
+  --shadow-3d: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+
+  /* Transition Easing */
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Light Mode Overrides */
+[data-theme="light"] {
+  --bg-main: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-card-hover: rgba(255, 255, 255, 0.95);
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --border: rgba(15, 23, 42, 0.08);
+  --border-light: rgba(15, 23, 42, 0.15);
+  --border-glow: rgba(59, 130, 246, 0.4);
+
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 8px 30px rgba(15, 23, 42, 0.1);
+  --shadow-lg: 0 25px 60px rgba(15, 23, 42, 0.15);
+  --shadow-3d: 0 20px 40px -15px rgba(15, 23, 42, 0.15);
+}
