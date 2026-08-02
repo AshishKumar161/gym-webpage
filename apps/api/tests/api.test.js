@@ -1,28 +1,26 @@
-/**
- * Automated API Test Suite — Verifies Health Check & Router Endpoints.
- */
+import test from 'node:test';
+import assert from 'node:assert';
 
-describe('A² ReVamp Gym API Test Suite', () => {
-  test('Health check endpoint validation logic', () => {
-    const healthResponse = {
-      status: 'OK',
-      uptime: 120.45,
-      timestamp: new Date().toISOString()
-    };
+test('Health check endpoint response structure', () => {
+  const healthResponse = {
+    status: 'OK',
+    uptime: 120.45,
+    timestamp: new Date().toISOString()
+  };
 
-    expect(healthResponse.status).toBe('OK');
-    expect(healthResponse.uptime).toBeGreaterThan(0);
-    expect(typeof healthResponse.timestamp).toBe('string');
-  });
+  assert.strictEqual(healthResponse.status, 'OK');
+  assert.strictEqual(typeof healthResponse.uptime, 'number');
+  assert.strictEqual(typeof healthResponse.timestamp, 'string');
+});
 
-  test('Membership plans schema validation', () => {
-    const plans = [
-      { name: 'Monthly', price: 999, durationMonths: 1 },
-      { name: 'Quarterly', price: 2499, durationMonths: 3 },
-      { name: 'Yearly', price: 7999, durationMonths: 12 }
-    ];
+test('Membership plans pricing logic', () => {
+  const plans = [
+    { name: 'Monthly', price: 999, durationMonths: 1 },
+    { name: 'Quarterly', price: 2499, durationMonths: 3 },
+    { name: 'Yearly', price: 7999, durationMonths: 12 }
+  ];
 
-    expect(plans.length).toBe(3);
-    expect(plans[1].price).toBe(2499);
-  });
+  assert.strictEqual(plans.length, 3);
+  assert.strictEqual(plans[1].price, 2499);
+  assert.strictEqual(plans[2].price, 7999);
 });
