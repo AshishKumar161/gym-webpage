@@ -1,55 +1,150 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>A² ReVamp Gym — Indore's Premier Fitness Destination</title>
   <meta name="description" content="A² ReVamp Gym in Pigdambar, Indore — state-of-the-art equipment, certified trainers, swimming pool, sauna, and affordable membership plans. Join today!" />
+  <link rel="canonical" href="https://a2revampgym.com" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#06b6d4" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="A² ReVamp Gym — Indore's Premier Fitness Destination" />
+  <meta property="og:description" content="State-of-the-art equipment, certified trainers, swimming pool, sauna & affordable memberships in Pigdambar, Indore." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://a2revampgym.com/src/images/gm5.webp" />
+  <meta property="og:url" content="https://a2revampgym.com" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="A² ReVamp Gym — Indore's Premier Fitness Destination" />
+  <meta name="twitter:description" content="Transform your body at A² ReVamp Gym, Indore. Premium equipment, certified trainers, pool & sauna." />
+  <meta name="twitter:image" content="https://a2revampgym.com/src/images/gm5.webp" />
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'><rect width='36' height='36' rx='9' fill='%234f8ef7'/><text x='50%25' y='53%25' dominant-baseline='central' text-anchor='middle' font-family='Inter,sans-serif' font-weight='900' font-size='14' fill='white'>A²</text></svg>" type="image/svg+xml" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/css/style.css" />
+
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HealthClub",
+    "name": "A² ReVamp Gym",
+    "image": "https://a2revampgym.com/src/images/gm5.webp",
+    "@id": "https://a2revampgym.com",
+    "url": "https://a2revampgym.com",
+    "telephone": "+918010844560",
+    "priceRange": "₹999 - ₹7999",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "Pigdambar CAPS Town",
+      "addressLocality": "Indore",
+      "addressRegion": "MP",
+      "postalCode": "453331",
+      "addressCountry": "IN"
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 22.6161358,
+      "longitude": 75.8000282
+    },
+    "openingHoursSpecification": [
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+        "opens": "06:00",
+        "closes": "10:30"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+        "opens": "17:00",
+        "closes": "21:30"
+      }
+    ],
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "5.0",
+      "reviewCount": "35"
+    }
+  }
+  </script>
 </head>
 <body>
 
+  <!-- Preloader Screen -->
+  <div id="preloader" role="status" aria-label="Loading A² ReVamp Gym">
+    <div class="loader-brand">
+      <span class="loader-logo">A²</span>
+      <span>ReVamp Gym</span>
+    </div>
+    <div class="loader-bar-wrap">
+      <div class="loader-bar"></div>
+    </div>
+  </div>
+
+  <!-- Skip to content (accessibility) -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
   <!-- ===== NAVBAR ===== -->
   <header class="site-header" id="site-header">
-    <nav class="nav-container">
-      <a href="#home" class="nav-logo">
+    <nav class="nav-container" aria-label="Main navigation">
+      <a href="#home" class="nav-logo" aria-label="A² ReVamp Gym — Home">
         <span class="logo-icon">A²</span>
         <span class="logo-text">ReVamp Gym</span>
       </a>
+
       <ul class="nav-menu" id="nav-menu">
         <li><a href="#why-us" class="nav-link">Why Us</a></li>
         <li><a href="#membership" class="nav-link">Membership</a></li>
-        <li><a href="#trainers" class="nav-link">Trainers</a></li>
-        <li><a href="#gallery" class="nav-link">Gallery</a></li>
+        <li><a href="#exercises" class="nav-link">Exercise Library</a></li>
+        <li><a href="#faqs" class="nav-link">FAQs</a></li>
         <li><a href="#contact" class="nav-link">Contact</a></li>
-        <li><a href="tel:08010844560" class="nav-link nav-call">📞 Call Now</a></li>
-        <li><a href="https://wa.me/918010844560" target="_blank" class="nav-link nav-cta">Join Now</a></li>
+        <!-- Dashboard Launch Triggers -->
+        <li><a href="#" class="nav-link open-dash-btn" data-role="admin" style="color:var(--accent-cyan); font-weight:700;">🛡️ Admin</a></li>
+        <li><a href="#" class="nav-link open-dash-btn" data-role="trainer" style="color:var(--amber); font-weight:700;">🏋️ Trainer</a></li>
+        <li><a href="#" class="nav-link open-dash-btn" data-role="member" style="color:var(--green); font-weight:700;">👤 Member</a></li>
+        <li><a href="https://wa.me/918010844560" target="_blank" rel="noopener" class="nav-link nav-cta">Join Now</a></li>
       </ul>
-      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle menu">
-        <span></span><span></span><span></span>
-      </button>
+
+      <div class="nav-right-actions">
+        <!-- Theme Toggle Button -->
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch Theme">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+
+        <button class="nav-toggle" id="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav-menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
     </nav>
   </header>
 
+  <main id="main-content">
+
   <!-- ===== 1. HERO ===== -->
-  <section class="hero" id="home">
+  <section class="hero" id="home" aria-label="Hero">
+    <canvas id="hero-canvas"></canvas>
     <div class="hero-bg">
-      <img src="/gm5.jpg" alt="A² ReVamp Gym, Indore" class="hero-bg-img" />
+      <img src="/src/images/gm5.webp" alt="A² ReVamp Gym, Indore main floor" class="hero-bg-img" width="1200" height="800" fetchpriority="high" decoding="async" />
       <div class="hero-overlay"></div>
     </div>
     <div class="hero-content fade-up">
-      <span class="hero-badge">⭐ 5.0 Rating · Indore's #1 Gym</span>
+      <span class="hero-badge">⭐ 5.0 Rating · Indore's #1 Enterprise Fitness Platform</span>
       <h1 class="hero-title">Transform Your Body<br>at A² ReVamp Gym</h1>
       <p class="hero-subtitle">
-        State-of-the-art equipment, certified trainers, personalized workouts, and affordable memberships — all under one roof in Pigdambar, Indore.
+        State-of-the-art equipment, certified trainers, AI fitness assistant, personalized workouts, and affordable memberships — all under one roof in Pigdambar, Indore.
       </p>
       <div class="hero-actions">
-        <a href="#membership" id="hero-join-btn" class="btn btn-primary">🟢 Join Now</a>
-        <a href="tel:08010844560" id="hero-call-btn" class="btn btn-phone">📞 Call Now</a>
-        <a href="https://wa.me/918010844560" id="hero-whatsapp-btn" target="_blank" class="btn btn-whatsapp">💬 WhatsApp Us</a>
+        <a href="#" class="btn btn-primary open-dash-btn" data-role="member">👤 Member Portal</a>
+        <a href="#" class="btn btn-outline open-dash-btn" data-role="trainer">🏋️ Trainer Portal</a>
+        <a href="#" class="btn btn-phone open-dash-btn" data-role="admin">🛡️ Admin Portal</a>
       </div>
     </div>
     <div class="hero-stats">
@@ -64,7 +159,7 @@
   </section>
 
   <!-- ===== 2. WHY CHOOSE US ===== -->
-  <section class="why-us section-pad" id="why-us">
+  <section class="why-us section-pad" id="why-us" aria-label="Why Choose Us">
     <div class="container">
       <div class="section-header fade-up">
         <span class="section-label">Why Choose Us</span>
@@ -72,398 +167,150 @@
         <p class="section-desc">We've built the perfect environment for your transformation journey.</p>
       </div>
       <div class="features-grid">
-        <div class="feature-card fade-up">
+        <div class="feature-card glass-card fade-up">
+          <div class="feature-icon-wrap">🤖</div>
+          <h3>AI Fitness Suite</h3>
+          <p>AI Workout & Diet generators tailored to your body type and target goals.</p>
+        </div>
+        <div class="feature-card glass-card fade-up" style="--delay:.05s">
           <div class="feature-icon-wrap">🏋️</div>
           <h3>Modern Equipment</h3>
           <p>Premium machines and free weights from top global brands, maintained daily.</p>
         </div>
-        <div class="feature-card fade-up" style="--delay:.05s">
+        <div class="feature-card glass-card fade-up" style="--delay:.1s">
           <div class="feature-icon-wrap">👨‍🏫</div>
           <h3>Certified Trainers</h3>
           <p>Our expert trainers hold international certifications and years of experience.</p>
         </div>
-        <div class="feature-card fade-up" style="--delay:.1s">
-          <div class="feature-icon-wrap">💸</div>
-          <h3>Affordable Memberships</h3>
-          <p>Flexible plans that fit every budget — from monthly to yearly packages.</p>
-        </div>
-        <div class="feature-card fade-up" style="--delay:.15s">
-          <div class="feature-icon-wrap">❄️</div>
-          <h3>Air Conditioned</h3>
-          <p>Comfortable climate-controlled environment for an enjoyable workout every day.</p>
-        </div>
-        <div class="feature-card fade-up" style="--delay:.2s">
-          <div class="feature-icon-wrap">🔒</div>
-          <h3>Locker Facility</h3>
-          <p>Secure personal lockers to keep your belongings safe while you train.</p>
-        </div>
-        <div class="feature-card fade-up" style="--delay:.25s">
-          <div class="feature-icon-wrap">🏃</div>
-          <h3>Cardio Zone</h3>
-          <p>A dedicated cardio area with treadmills, bikes, ellipticals, and rowers.</p>
-        </div>
-        <div class="feature-card fade-up" style="--delay:.3s">
-          <div class="feature-icon-wrap">💪</div>
-          <h3>Strength Zone</h3>
-          <p>Full free-weights area with barbells, dumbbells, and cable machines.</p>
-        </div>
-        <div class="feature-card fade-up" style="--delay:.35s">
-          <div class="feature-icon-wrap">🅿️</div>
-          <h3>Free Parking</h3>
-          <p>Ample free parking right at the gym entrance — no hassle, ever.</p>
+        <div class="feature-card glass-card fade-up" style="--delay:.15s">
+          <div class="feature-icon-wrap">📲</div>
+          <h3>Digital QR Check-in</h3>
+          <p>Scan your phone pass for instant, contact-free entrance check-in.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ===== 3. GYM TOUR VIDEO ===== -->
-  <section class="tour-section section-pad" id="tour">
+  <!-- ===== 3. EXERCISE LIBRARY ===== -->
+  <section class="exercises section-pad" id="exercises" aria-label="Exercise Library">
     <div class="container">
       <div class="section-header fade-up">
-        <span class="section-label">Gym Tour</span>
-        <h2 class="section-title">See it before you visit</h2>
-        <p class="section-desc">Take a virtual walkthrough of our world-class facility in Indore.</p>
+        <span class="section-label">Exercise Library</span>
+        <h2 class="section-title">Master proper form & execution</h2>
+        <p class="section-desc">Browse our video exercise database categorized by muscle group.</p>
       </div>
-      <div class="video-container fade-up">
-        <div class="video-wrapper">
-          <!-- Replace the src below with your actual YouTube embed URL -->
-          <iframe
-            id="gym-tour-video"
-            src="https://www.youtube.com/embed/dQw4w9WgXcQ?controls=1&rel=0&modestbranding=1"
-            title="A² ReVamp Gym Tour"
-            frameborder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowfullscreen>
-          </iframe>
-          <div class="video-placeholder" id="video-placeholder">
-            <img src="/gm6.jpg" alt="World-class gym equipment" class="about-img" />
-            <div class="play-overlay">
-              <div class="play-btn" id="play-btn">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              </div>
-              <p>Click to Watch Gym Tour</p>
-            </div>
-          </div>
-        </div>
-        <div class="tour-highlights">
-          <div class="tour-item fade-up">
-            <span class="tour-icon">🏢</span>
-            <div>
-              <strong>Reception & Lobby</strong>
-              <p>Welcoming entrance with modern design</p>
-            </div>
-          </div>
-          <div class="tour-item fade-up" style="--delay:.1s">
-            <span class="tour-icon">🏋️</span>
-            <div>
-              <strong>Workout Floor</strong>
-              <p>Massive open floor with premium machines</p>
-            </div>
-          </div>
-          <div class="tour-item fade-up" style="--delay:.2s">
-            <span class="tour-icon">🏊</span>
-            <div>
-              <strong>Swimming Pool</strong>
-              <p>Temperature-controlled indoor pool</p>
-            </div>
-          </div>
-          <div class="tour-item fade-up" style="--delay:.3s">
-            <span class="tour-icon">🌡️</span>
-            <div>
-              <strong>Sauna Room</strong>
-              <p>Luxury Finnish-style recovery sauna</p>
-            </div>
-          </div>
-          <div class="tour-item fade-up" style="--delay:.4s">
-            <span class="tour-icon">🚿</span>
-            <div>
-              <strong>Changing Rooms</strong>
-              <p>Spacious, clean, and secure lockers</p>
-            </div>
-          </div>
-        </div>
+
+      <div class="filter-tabs fade-up" style="margin-bottom:2rem;">
+        <button type="button" class="filter-btn ex-filter-btn active" data-muscle="all">All Muscle Groups</button>
+        <button type="button" class="filter-btn ex-filter-btn" data-muscle="chest">Chest</button>
+        <button type="button" class="filter-btn ex-filter-btn" data-muscle="back">Back</button>
+        <button type="button" class="filter-btn ex-filter-btn" data-muscle="legs">Legs</button>
+        <button type="button" class="filter-btn ex-filter-btn" data-muscle="shoulders">Shoulders</button>
+        <button type="button" class="filter-btn ex-filter-btn" data-muscle="arms">Arms</button>
       </div>
+
+      <div class="exercises-grid" id="exercise-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:1.5rem;"></div>
     </div>
   </section>
 
   <!-- ===== 4. MEMBERSHIP PLANS ===== -->
-  <section class="membership section-pad" id="membership">
+  <section class="membership section-pad" id="membership" aria-label="Membership Plans">
     <div class="container">
       <div class="section-header fade-up">
         <span class="section-label">Membership Plans</span>
         <h2 class="section-title">Simple, transparent pricing</h2>
-        <p class="section-desc">No hidden fees. No surprises. Just results.</p>
+        <p class="section-desc">No hidden fees. Pay via Razorpay, Stripe, or Cash.</p>
       </div>
+
       <div class="plans-grid">
         <!-- Monthly -->
-        <div class="plan-card fade-up">
+        <div class="plan-card glass-card fade-up">
           <div class="plan-header">
             <span class="plan-name">Monthly</span>
-            <div class="plan-price"><span class="currency">₹</span>999<span class="per">/month</span></div>
+            <div class="plan-price"><span class="currency">₹</span><span>999</span><span class="per">/month</span></div>
           </div>
           <ul class="plan-features">
             <li>✓ Full gym access</li>
             <li>✓ Cardio & strength zones</li>
             <li>✓ Locker facility</li>
-            <li>✓ Free parking</li>
-            <li>✓ Wi-Fi access</li>
-            <li class="muted">✗ Swimming pool</li>
-            <li class="muted">✗ Sauna access</li>
-            <li class="muted">✗ Personal training</li>
           </ul>
-          <a href="https://wa.me/918010844560?text=Hi!%20I%27m%20interested%20in%20the%20Monthly%20membership." target="_blank" class="btn btn-outline plan-btn" id="plan-monthly-btn">Get Started</a>
+          <a href="#" class="btn btn-outline plan-btn open-dash-btn" data-role="member">Get Started</a>
         </div>
 
         <!-- Quarterly — Best Value -->
-        <div class="plan-card plan-featured fade-up" style="--delay:.1s">
+        <div class="plan-card glass-card plan-featured fade-up" style="--delay:.1s">
           <div class="plan-badge">⭐ Best Value</div>
           <div class="plan-header">
             <span class="plan-name">Quarterly</span>
-            <div class="plan-price"><span class="currency">₹</span>2,499<span class="per">/3 months</span></div>
-            <div class="plan-saving">Save ₹498</div>
+            <div class="plan-price"><span class="currency">₹</span><span>2,499</span><span class="per">/3 months</span></div>
           </div>
           <ul class="plan-features">
             <li>✓ Full gym access</li>
-            <li>✓ Cardio & strength zones</li>
-            <li>✓ Locker facility</li>
-            <li>✓ Free parking</li>
-            <li>✓ Wi-Fi access</li>
-            <li>✓ Swimming pool</li>
-            <li>✓ Sauna access</li>
-            <li class="muted">✗ Personal training</li>
+            <li>✓ Swimming pool & Sauna</li>
+            <li>✓ AI Workout Plan</li>
           </ul>
-          <a href="https://wa.me/918010844560?text=Hi!%20I%27m%20interested%20in%20the%20Quarterly%20membership." target="_blank" class="btn btn-primary plan-btn" id="plan-quarterly-btn">Join Now</a>
+          <a href="#" class="btn btn-primary plan-btn open-dash-btn" data-role="member">Join Now</a>
         </div>
 
         <!-- Yearly -->
-        <div class="plan-card fade-up" style="--delay:.2s">
+        <div class="plan-card glass-card fade-up" style="--delay:.2s">
           <div class="plan-header">
             <span class="plan-name">Yearly</span>
-            <div class="plan-price"><span class="currency">₹</span>7,999<span class="per">/year</span></div>
-            <div class="plan-saving plan-saving-gold">Save ₹3,989</div>
+            <div class="plan-price"><span class="currency">₹</span><span>7,999</span><span class="per">/year</span></div>
           </div>
           <ul class="plan-features">
             <li>✓ Full gym access</li>
-            <li>✓ Cardio & strength zones</li>
-            <li>✓ Locker facility</li>
-            <li>✓ Free parking</li>
-            <li>✓ Wi-Fi access</li>
-            <li>✓ Swimming pool</li>
-            <li>✓ Sauna access</li>
+            <li>✓ Swimming pool & Sauna</li>
             <li>✓ 2 Personal training sessions/mo</li>
           </ul>
-          <a href="https://wa.me/918010844560?text=Hi!%20I%27m%20interested%20in%20the%20Yearly%20membership." target="_blank" class="btn btn-outline plan-btn" id="plan-yearly-btn">Get Started</a>
+          <a href="#" class="btn btn-outline plan-btn open-dash-btn" data-role="member">Get Started</a>
         </div>
       </div>
-      <p class="plans-note fade-up">* Prices are indicative. Contact us for exact current pricing and special offers.</p>
     </div>
   </section>
 
-  <!-- ===== 5. BEFORE & AFTER ===== -->
-  <section class="transformations section-pad" id="transformations">
+  <!-- ===== 5. FAQS ACCORDION ===== -->
+  <section class="faqs section-pad" id="faqs" aria-label="Frequently Asked Questions">
     <div class="container">
       <div class="section-header fade-up">
-        <span class="section-label">Real Results</span>
-        <h2 class="section-title">Members who transformed<br>their lives</h2>
-        <p class="section-desc">Real people. Real results. Your transformation story starts here.</p>
+        <span class="section-label">FAQs</span>
+        <h2 class="section-title">Frequently Asked Questions</h2>
       </div>
-      <div class="transform-grid">
-        <div class="transform-card fade-up">
-          <div class="transform-img-wrap">
-            <img src="/gm8.jpg" alt="Member Transformation" />
-            <div class="transform-labels">
-              <span class="label-before">Before</span>
-              <span class="label-after">After</span>
-            </div>
-          </div>
-          <div class="transform-info">
-            <h3>Rahul's Journey</h3>
-            <p>Lost <strong>18 kg</strong> in 6 months with personalized training and diet guidance.</p>
-            <span class="transform-time">6 Months · Daily Training</span>
-          </div>
-        </div>
-        <div class="transform-card fade-up" style="--delay:.15s">
-          <div class="transform-img-wrap">
-            <img src="/gm9.jpg" alt="Member Transformation" />
-            <div class="transform-labels">
-              <span class="label-before">Before</span>
-              <span class="label-after">After</span>
-            </div>
-          </div>
-          <div class="transform-info">
-            <h3>Priya's Journey</h3>
-            <p>Gained <strong>8 kg of muscle</strong> in 4 months with dedicated strength training.</p>
-            <span class="transform-time">4 Months · Strength Training</span>
-          </div>
-        </div>
-        <div class="transform-card fade-up" style="--delay:.3s">
-          <div class="transform-img-wrap">
-            <img src="/gm10.jpg" alt="Member Transformation" />
-            <div class="transform-labels">
-              <span class="label-before">Before</span>
-              <span class="label-after">After</span>
-            </div>
-          </div>
-          <div class="transform-info">
-            <h3>Rohan's Journey</h3>
-            <p>Achieved a complete body recomposition with <strong>12% fat loss</strong> and muscle gain.</p>
-            <span class="transform-time">5 Months · Fitness Coaching</span>
-          </div>
-        </div>
-      </div>
-      <div class="transform-footer fade-up" style="text-align: center; margin-top: 3.5rem;">
-        <p style="color: var(--text-secondary); margin-bottom: 1.2rem; font-size: 1.05rem;">Are you ready to write your own success story?</p>
-        <a href="https://wa.me/918010844560?text=Hi!%20I%27d%20like%20to%20start%20my%20fitness%20transformation." target="_blank" class="btn btn-primary" id="transform-section-cta">Start Your Journey Today 💪</a>
-      </div>
-    </div>
-  </section>
 
-  <!-- ===== 6. TRAINERS ===== -->
-  <section class="trainers section-pad" id="trainers">
-    <div class="container">
-      <div class="section-header fade-up">
-        <span class="section-label">Our Experts</span>
-        <h2 class="section-title">Meet our certified trainers</h2>
-        <p class="section-desc">Dedicated professionals who are committed to your success.</p>
-      </div>
-      <div class="trainers-grid">
-        <div class="trainer-card fade-up">
-          <div class="trainer-img-wrap">
-            <img src="/gm4.jpg" alt="Gym Training Area" />
+      <div style="max-width:750px; margin:0 auto; display:flex; flex-direction:column; gap:1rem;">
+        <div class="glass-card faq-item fade-up" style="padding:1.2rem 1.5rem; cursor:pointer;">
+          <div class="faq-question" style="font-family:var(--font-display); font-weight:700; font-size:1.05rem; display:flex; justify-content:space-between; align-items:center;">
+            <span>What are the opening and closing timings?</span>
+            <span>➕</span>
           </div>
-          <div class="trainer-info">
-            <h3>Arjun Sharma</h3>
-            <span class="trainer-role">Head Trainer & Co-founder</span>
-            <div class="trainer-meta">
-              <span>📅 8+ Years Experience</span>
-              <span>🏅 CPT Certified</span>
-            </div>
-            <div class="trainer-tags">
-              <span class="tag">Strength Training</span>
-              <span class="tag">Bodybuilding</span>
-              <span class="tag">Nutrition</span>
-            </div>
+          <div class="faq-answer" style="color:var(--text-secondary); margin-top:0.8rem; font-size:0.92rem; display:none;">
+            A² ReVamp Gym is open Monday through Saturday: Morning (6:00 AM – 10:30 AM) and Evening (5:00 PM – 9:30 PM). Sunday is closed.
           </div>
         </div>
-        <div class="trainer-card fade-up" style="--delay:.1s">
-          <div class="trainer-img-wrap">
-            <img src="/gm2.jpg" alt="Gym Equipment" />
+        <div class="glass-card faq-item fade-up" style="padding:1.2rem 1.5rem; cursor:pointer;">
+          <div class="faq-question" style="font-family:var(--font-display); font-weight:700; font-size:1.05rem; display:flex; justify-content:space-between; align-items:center;">
+            <span>Do you offer personal training?</span>
+            <span>➕</span>
           </div>
-          <div class="trainer-info">
-            <h3>Priya Verma</h3>
-            <span class="trainer-role">Senior Fitness Coach</span>
-            <div class="trainer-meta">
-              <span>📅 5+ Years Experience</span>
-              <span>🏅 ACE Certified</span>
-            </div>
-            <div class="trainer-tags">
-              <span class="tag">Weight Loss</span>
-              <span class="tag">Yoga</span>
-              <span class="tag">Cardio</span>
-            </div>
+          <div class="faq-answer" style="color:var(--text-secondary); margin-top:0.8rem; font-size:0.92rem; display:none;">
+            Yes! Our certified trainers offer customized 1-on-1 personal training sessions with personalized diet & workout routines.
           </div>
         </div>
-        <div class="trainer-quote fade-up" style="--delay:.2s">
-          <blockquote>"We don't just train bodies — we transform mindsets. Every rep, every session, every drop of sweat brings you closer to the best version of yourself."</blockquote>
-          <cite>— The A² ReVamp Gym Training Team</cite>
-          <a href="https://wa.me/918010844560?text=Hi!%20I%27d%20like%20to%20know%20more%20about%20personal%20training." target="_blank" class="btn btn-outline" style="margin-top:1.5rem; display:inline-block;" id="trainer-contact-btn">Talk to a Trainer</a>
+        <div class="glass-card faq-item fade-up" style="padding:1.2rem 1.5rem; cursor:pointer;">
+          <div class="faq-question" style="font-family:var(--font-display); font-weight:700; font-size:1.05rem; display:flex; justify-content:space-between; align-items:center;">
+            <span>Is swimming pool & sauna included in all plans?</span>
+            <span>➕</span>
+          </div>
+          <div class="faq-answer" style="color:var(--text-secondary); margin-top:0.8rem; font-size:0.92rem; display:none;">
+            Swimming pool and sauna access are included in our Quarterly and Yearly membership packages!
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ===== 7. REVIEWS ===== -->
-  <section class="reviews section-pad" id="reviews">
-    <div class="container">
-      <div class="section-header fade-up">
-        <span class="section-label">Customer Reviews</span>
-        <h2 class="section-title">What our members say</h2>
-        <div class="overall-rating fade-up">
-          <div class="big-stars">⭐⭐⭐⭐⭐</div>
-          <div class="big-rating">5.0 <span>/ 5.0 on Google</span></div>
-          <div class="total-reviews">Based on 35+ verified reviews</div>
-        </div>
-      </div>
-      <div class="reviews-grid">
-        <div class="review-card fade-up">
-          <div class="review-header">
-            <div class="reviewer-avatar" style="background:#4285f4">A</div>
-            <div>
-              <strong>Akash Gupta</strong>
-              <span class="review-stars">⭐⭐⭐⭐⭐</span>
-            </div>
-          </div>
-          <p class="review-text">"Best gym in Pigdambar area. Equipment is brand new and the trainers are very helpful with form correction. Highly recommend!"</p>
-          <span class="review-date">Google Maps Review · Verified Member</span>
-        </div>
-        <div class="review-card fade-up" style="--delay:.1s">
-          <div class="review-header">
-            <div class="reviewer-avatar" style="background:#34a853">S</div>
-            <div>
-              <strong>Suresh Rathore</strong>
-              <span class="review-stars">⭐⭐⭐⭐⭐</span>
-            </div>
-          </div>
-          <p class="review-text">"Great atmosphere. The swimming pool and sauna are fantastic additions for recovery after a heavy lifting session."</p>
-          <span class="review-date">Google Maps Review · Verified Member</span>
-        </div>
-        <div class="review-card fade-up" style="--delay:.2s">
-          <div class="review-header">
-            <div class="reviewer-avatar" style="background:#ea4335">V</div>
-            <div>
-              <strong>Vikram Singh</strong>
-              <span class="review-stars">⭐⭐⭐⭐⭐</span>
-            </div>
-          </div>
-          <p class="review-text">"The gym is very spacious and clean. Proper ventilation and excellent maintenance of the machines. Worth every rupee."</p>
-          <span class="review-date">Google Maps Review · Verified Member</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== 8. GALLERY ===== -->
-  <section class="gallery section-pad" id="gallery">
-    <div class="container">
-      <div class="section-header fade-up">
-        <span class="section-label">Gallery</span>
-        <h2 class="section-title">A peek inside<br>A² ReVamp Gym</h2>
-      </div>
-      <div class="gallery-grid">
-        <div class="gallery-item gallery-large fade-up">
-          <img src="/gm5.jpg" alt="A² ReVamp Gym Main Floor" />
-          <div class="gallery-caption">Main Workout Floor</div>
-        </div>
-        <div class="gallery-item fade-up" style="--delay:.05s">
-          <img src="/gm2.jpg" alt="Strength Equipment" />
-          <div class="gallery-caption">Strength Equipment</div>
-        </div>
-        <div class="gallery-item fade-up" style="--delay:.1s">
-          <img src="/gm3.jpg" alt="Free Weights Area" />
-          <div class="gallery-caption">Free Weights Area</div>
-        </div>
-        <div class="gallery-item fade-up" style="--delay:.15s">
-          <img src="/gm4.jpg" alt="Dumbbell Rack" />
-          <div class="gallery-caption">Dumbbell Rack</div>
-        </div>
-        <div class="gallery-item fade-up" style="--delay:.2s">
-          <img src="/gm6.jpg" alt="Cardio & Machines" />
-          <div class="gallery-caption">Cardio Zone</div>
-        </div>
-        <div class="gallery-item fade-up" style="--delay:.25s">
-          <img src="/gm3.jpg" alt="Indoor Swimming Pool" />
-          <div class="gallery-caption">Powerlifting Zone</div>
-        </div>
-        <div class="gallery-item gallery-wide fade-up" style="--delay:.3s">
-          <img src="/gm9.jpg" alt="Functional Training Area" />
-          <div class="gallery-caption">Functional Training Area</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== 9. LOCATION ===== -->
-  <section class="contact-section section-pad" id="contact">
+  <!-- ===== 6. LOCATION & CONTACT ===== -->
+  <section class="contact-section section-pad" id="contact" aria-label="Contact and Location">
     <div class="container">
       <div class="section-header fade-up">
         <span class="section-label">Find Us</span>
@@ -471,34 +318,37 @@
       </div>
       <div class="contact-grid">
         <div class="contact-info-block fade-up">
-          <div class="contact-card">
-            <span class="contact-icon">📍</span>
+          <div class="contact-card glass-card">
+            <span class="contact-icon" aria-hidden="true">📍</span>
             <div>
               <strong>Address</strong>
               <p>A² Revamp Gym, Pigdambar CAPS Town,<br>Indore, Madhya Pradesh – 453331</p>
             </div>
           </div>
-          <div class="contact-card">
-            <span class="contact-icon">📞</span>
+          <div class="contact-card glass-card">
+            <span class="contact-icon" aria-hidden="true">📞</span>
             <div>
               <strong>Phone</strong>
-              <p><a href="tel:08010844560">080108 44560</a></p>
+              <p><a href="tel:08010844560" style="color:var(--accent-cyan);">080108 44560</a></p>
             </div>
           </div>
-          <div class="contact-card">
-            <span class="contact-icon">🕐</span>
-            <div>
-              <strong>Opening Hours</strong>
-              <p>Mon–Sat: 6:00 AM–10:30 AM<br>Mon–Sat: 5:00 PM–9:30 PM<br><span style="color:#f87171">Sunday: Closed</span></p>
+
+          <!-- Glass Contact Form -->
+          <form class="contact-form glass-card" id="contact-form">
+            <h3 style="font-family:var(--font-display); font-size:1.2rem; font-weight:800;">Send Us a Message</h3>
+            <div class="form-group">
+              <label for="form-name">Your Full Name *</label>
+              <input type="text" id="form-name" class="form-control" placeholder="Rahul Sharma" required />
             </div>
-          </div>
-          <div class="contact-actions">
-            <a href="tel:08010844560" class="btn btn-phone" id="contact-call-btn">📞 Call Us</a>
-            <a href="https://wa.me/918010844560" target="_blank" class="btn btn-whatsapp" id="contact-wa-btn">💬 WhatsApp</a>
-            <a href="https://maps.app.goo.gl/JFeq775hi1WLF9xw7" target="_blank" class="btn btn-outline" id="contact-map-btn">📍 Get Directions</a>
-          </div>
+            <div class="form-group">
+              <label for="form-phone">Phone Number *</label>
+              <input type="tel" id="form-phone" class="form-control" placeholder="+91 98765 43210" required />
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">💬 Send Message via WhatsApp</button>
+          </form>
         </div>
-        <div class="map-embed fade-up">
+
+        <div class="map-embed glass-card fade-up">
           <iframe
             src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3679.0!2d75.8000282!3d22.6161358!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3962fd069e97eb4b%3A0x7b3e3c4ea8f4a0fa!2sA%C2%B2%20ReVamp%20Gym!5e0!3m2!1sen!2sin!4v1700000000000"
             title="A² ReVamp Gym on Google Maps"
@@ -511,63 +361,17 @@
     </div>
   </section>
 
-  <!-- ===== 10. FINAL CTA ===== -->
-  <section class="final-cta section-pad" id="cta">
-    <div class="container">
-      <div class="cta-card fade-up">
-        <div class="cta-content">
-          <h2>Ready to Start Your<br>Fitness Journey?</h2>
-          <p>Join A² ReVamp Gym today and take the first step towards the body and lifestyle you've always wanted. Your transformation starts with one decision.</p>
-          <div class="cta-buttons">
-            <a href="https://wa.me/918010844560?text=Hi!%20I%27d%20like%20a%20free%20trial%20at%20A%C2%B2%20ReVamp%20Gym." target="_blank" class="btn btn-primary" id="cta-trial-btn">🎯 Get Free Trial</a>
-            <a href="tel:08010844560" class="btn btn-phone" id="cta-call-btn">📞 Contact Us</a>
-            <a href="https://wa.me/918010844560?text=Hi!%20I%27d%20like%20to%20join%20A%C2%B2%20ReVamp%20Gym." target="_blank" class="btn btn-whatsapp" id="cta-join-btn">💪 Join Today</a>
-          </div>
-        </div>
-        <div class="cta-image">
-          <img src="/gm8.jpg" alt="A² ReVamp Gym — Join Today" />
-        </div>
-      </div>
-    </div>
-  </section>
+  </main>
 
   <!-- ===== FOOTER ===== -->
-  <footer class="site-footer">
+  <footer class="site-footer" role="contentinfo">
     <div class="container footer-inner">
       <div class="footer-brand">
-        <a href="#home" class="nav-logo">
+        <a href="#home" class="nav-logo" aria-label="A² ReVamp Gym — Home">
           <span class="logo-icon">A²</span>
           <span class="logo-text">ReVamp Gym</span>
         </a>
         <p>Transforming lives in Indore, one workout at a time.</p>
-        <div class="footer-social">
-          <a href="https://wa.me/918010844560" target="_blank" class="social-btn whatsapp-social">💬 WhatsApp</a>
-          <a href="https://maps.app.goo.gl/JFeq775hi1WLF9xw7" target="_blank" class="social-btn maps-social">📍 Google Maps</a>
-        </div>
-      </div>
-      <div class="footer-links">
-        <div class="footer-col">
-          <strong>Quick Links</strong>
-          <a href="#why-us">Why Choose Us</a>
-          <a href="#membership">Membership</a>
-          <a href="#trainers">Our Trainers</a>
-          <a href="#gallery">Gallery</a>
-          <a href="#reviews">Reviews</a>
-        </div>
-        <div class="footer-col">
-          <strong>Facilities</strong>
-          <a href="#gallery">Swimming Pool</a>
-          <a href="#gallery">Sauna Room</a>
-          <a href="#gallery">Cardio Zone</a>
-          <a href="#gallery">Strength Zone</a>
-          <a href="#gallery">Group Classes</a>
-        </div>
-        <div class="footer-col">
-          <strong>Contact</strong>
-          <a href="tel:08010844560">080108 44560</a>
-          <a href="https://wa.me/918010844560" target="_blank">WhatsApp Us</a>
-          <a href="https://maps.app.goo.gl/JFeq775hi1WLF9xw7" target="_blank">Get Directions</a>
-        </div>
       </div>
     </div>
     <div class="footer-bottom">
@@ -575,6 +379,62 @@
     </div>
   </footer>
 
-  <script type="module" src="/main.js"></script>
+  <!-- Toast Notification Alert -->
+  <div id="toast" class="toast-notification">
+    <span>✅ Message sent! Redirecting to WhatsApp...</span>
+  </div>
+
+  <!-- FLOATING AI ASSISTANT CHATBOT TRIGGER & WIDGET -->
+  <button type="button" id="ai-assistant-toggle" style="position:fixed; bottom:25px; right:25px; z-index:8000; width:58px; height:58px; border-radius:50%; background:linear-gradient(135deg, var(--accent), var(--accent-cyan)); border:none; color:#fff; font-size:1.6rem; cursor:pointer; box-shadow:0 10px 25px rgba(6,182,212,0.4); display:flex; align-items:center; justify-content:center;" aria-label="Open AI Fitness Assistant">🤖</button>
+
+  <div id="ai-assistant-widget" style="display:none; position:fixed; bottom:95px; right:25px; z-index:8001; width:340px; height:460px; background:var(--bg-surface); border:1px solid var(--border-light); border-radius:var(--r-xl); flex-direction:column; overflow:hidden; box-shadow:var(--shadow-lg);" class="glass-card">
+    <div style="background:var(--bg-surface-2); padding:0.9rem 1.2rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <span>🤖</span>
+        <strong style="font-family:var(--font-display); font-size:0.95rem;">A² AI Fitness Assistant</strong>
+      </div>
+      <button type="button" id="ai-chat-close" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem;">&times;</button>
+    </div>
+
+    <div id="ai-chat-messages" style="flex:1; padding:1rem; overflow-y:auto; display:flex; flex-direction:column; gap:0.8rem;">
+      <div class="ai-msg ai-msg-bot" style="background:var(--bg-surface-2); padding:0.75rem 1rem; border-radius:var(--r-md); font-size:0.85rem; color:var(--text-secondary);">
+        <span>Hi! I'm your AI Fitness Assistant. Ask me anything about workout routines, nutrition, gym timings, or membership pricing! 💪</span>
+      </div>
+    </div>
+
+    <form id="ai-chat-form" style="padding:0.8rem; border-top:1px solid var(--border); display:flex; gap:0.5rem;">
+      <input type="text" id="ai-chat-input" class="form-control" placeholder="Ask AI a question..." style="padding:0.5rem 0.8rem; font-size:0.85rem;" />
+      <button type="submit" class="btn btn-primary" style="padding:0.5rem 0.8rem; font-size:0.85rem;">Send</button>
+    </form>
+  </div>
+
+  <!-- ===== FULLSCREEN DASHBOARD MODAL PLATFORM ===== -->
+  <div id="dashboard-modal" role="dialog" aria-modal="true" aria-label="Gym Management Platform Dashboards">
+    <div class="dash-topbar">
+      <div style="display:flex; align-items:center; gap:0.8rem;">
+        <span class="logo-icon">A²</span>
+        <strong style="font-family:var(--font-display); font-size:1.1rem;">ReVamp Gym SaaS Platform</strong>
+      </div>
+
+      <!-- Quick Role Switcher (Admin ↔ Trainer ↔ Member) -->
+      <div class="dash-role-switcher">
+        <button type="button" class="role-tab-btn active" data-role="admin">🛡️ Admin Dashboard</button>
+        <button type="button" class="role-tab-btn" data-role="trainer">🏋️ Trainer Dashboard</button>
+        <button type="button" class="role-tab-btn" data-role="member">👤 Member Dashboard</button>
+      </div>
+
+      <button type="button" class="dash-close-btn" id="dash-close-btn" aria-label="Close Dashboard">&times;</button>
+    </div>
+
+    <div class="dash-body">
+      <!-- Role Sidebar -->
+      <div class="dash-sidebar" id="dash-sidebar"></div>
+
+      <!-- Content Panel -->
+      <div class="dash-content" id="dash-content"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/js/main.js"></script>
 </body>
 </html>

@@ -1,0 +1,16 @@
+{
+  "short_name": "A² Gym",
+  "name": "A² ReVamp Gym — Enterprise SaaS Platform",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'><rect width='36' height='36' rx='9' fill='%234f8ef7'/><text x='50%25' y='53%25' dominant-baseline='central' text-anchor='middle' font-family='Inter,sans-serif' font-weight='900' font-size='14' fill='white'>A²</text></svg>",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#06b6d4",
+  "display": "standalone",
+  "orientation": "portrait"
+}
