@@ -8,6 +8,10 @@
     "build": "vite build",
     "preview": "vite preview"
   },
+  "dependencies": {
+    "gsap": "^3.12.5",
+    "vanilla-tilt": "^1.8.1"
+  },
   "devDependencies": {
     "vite": "^5.0.0"
   }
