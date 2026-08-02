@@ -23,6 +23,3 @@ dist-ssr
 *.sln
 *.sw?
 
-# Gym application code (excluded from this landing page repo)
-fitforge-pro/
-
