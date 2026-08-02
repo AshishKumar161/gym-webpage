@@ -6,12 +6,17 @@ on:
   pull_request:
     branches: [ main, master ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test-and-build:
+  audit-build-and-test:
+    name: Monorepo Audit, Build & Test
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository Code
         uses: actions/checkout@v4
 
       - name: Setup Node.js 20.x
@@ -20,16 +25,14 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Frontend Dependencies
+      - name: Install Monorepo Workspace Dependencies
         run: npm ci
 
-      - name: Build Vite Production Assets
+      - name: Run Backend Test Suite (apps/api)
+        run: npm test
+
+      - name: Build Production Frontend (apps/web)
         run: npm run build
 
-      - name: Install Backend Dependencies
-        run: |
-          cd server
-          npm ci
-
-      - name: Run Backend Health Checks
-        run: node -e "console.log('Build syntax check clean!')"
+      - name: Validate Docker Production Build
+        run: docker build -f docker/Dockerfile -t a2gym-platform .
