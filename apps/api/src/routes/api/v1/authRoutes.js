@@ -6,8 +6,13 @@ import {
   login,
   refreshToken,
   logout,
+  logoutAll,
+  getMe,
+  changePassword,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  getSessions,
+  revokeSession
 } from '../../../controllers/authController.js';
 import { protect } from '../../../middlewares/authMiddleware.js';
 import { authLimiter } from '../../../middlewares/rateLimiter.js';
@@ -18,12 +23,17 @@ const router = express.Router();
 // Apply auth rate limiter to all auth routes
 router.use(authLimiter);
 
+// ─── Public Routes ─────────────────────────────────────────────────────────────
+
 router.post(
   '/register',
   validate([
-    body('name').notEmpty().withMessage('Name is required'),
-    body('email').isEmail().withMessage('Please provide a valid email'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+    body('name').notEmpty().trim().withMessage('Name is required'),
+    body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
+    body('password')
+      .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+      .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
+      .matches(/\d/).withMessage('Password must contain at least one number')
   ]),
   register
 );
@@ -40,14 +50,13 @@ router.post(
 router.post(
   '/login',
   validate([
-    body('email').isEmail().withMessage('Valid email required'),
+    body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
     body('password').notEmpty().withMessage('Password required')
   ]),
   login
 );
 
 router.post('/refresh-token', refreshToken);
-router.post('/logout', protect, logout);
 
 router.post(
   '/forgot-password',
@@ -58,10 +67,31 @@ router.post(
 router.post(
   '/reset-password',
   validate([
-    body('token').notEmpty().withMessage('Token required'),
-    body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+    body('token').notEmpty().withMessage('Reset token required'),
+    body('newPassword')
+      .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
   ]),
   resetPassword
 );
+
+// ─── Protected Routes (requires valid access token) ───────────────────────────
+
+router.get('/me', protect, getMe);
+router.post('/logout', protect, logout);
+router.post('/logout-all', protect, logoutAll);
+
+router.post(
+  '/change-password',
+  protect,
+  validate([
+    body('currentPassword').notEmpty().withMessage('Current password required'),
+    body('newPassword')
+      .isLength({ min: 8 }).withMessage('New password must be at least 8 characters')
+  ]),
+  changePassword
+);
+
+router.get('/sessions', protect, getSessions);
+router.delete('/sessions/:id', protect, revokeSession);
 
 export default router;

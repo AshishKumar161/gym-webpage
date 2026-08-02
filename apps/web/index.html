@@ -106,11 +106,8 @@
         <li><a href="#exercises" class="nav-link">Exercise Library</a></li>
         <li><a href="#faqs" class="nav-link">FAQs</a></li>
         <li><a href="#contact" class="nav-link">Contact</a></li>
-        <!-- Dashboard Launch Triggers -->
-        <li><a href="#" class="nav-link open-dash-btn" data-role="admin" style="color:var(--accent-cyan); font-weight:700;">🛡️ Admin</a></li>
-        <li><a href="#" class="nav-link open-dash-btn" data-role="trainer" style="color:var(--amber); font-weight:700;">🏋️ Trainer</a></li>
-        <li><a href="#" class="nav-link open-dash-btn" data-role="member" style="color:var(--green); font-weight:700;">👤 Member</a></li>
-        <li><a href="https://wa.me/918010844560" target="_blank" rel="noopener" class="nav-link nav-cta">Join Now</a></li>
+        <!-- Auth Nav Slot — dynamically populated by Navigation.js based on auth state -->
+        <ul id="nav-auth-slot" style="display:contents;"></ul>
       </ul>
 
       <div class="nav-right-actions">
