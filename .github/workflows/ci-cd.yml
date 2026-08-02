@@ -23,10 +23,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install Monorepo Workspace Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run Backend Test Suite (apps/api)
         run: npm test
