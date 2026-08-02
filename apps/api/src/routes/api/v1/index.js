@@ -1,6 +1,8 @@
 import express from 'express';
 import authRoutes from './authRoutes.js';
 import userRoutes from './userRoutes.js';
+import memberRoutes from './memberRoutes.js';
+import trainerRoutes from './trainerRoutes.js';
 import membershipRoutes from './membershipRoutes.js';
 import inquiryRoutes from './inquiryRoutes.js';
 import adminRoutes from './adminRoutes.js';
@@ -16,11 +18,18 @@ import aiRoutes from './aiRoutes.js';
 
 const router = express.Router();
 
+// ─── Auth (Public + Protected) ────────────────────────────────────────────────
 router.use('/auth', authRoutes);
+
+// ─── Role-Based Namespaced Routes (Backend enforces RBAC) ────────────────────
+router.use('/admin', adminRoutes);           // admin only
+router.use('/trainer', trainerRoutes);       // trainer + admin
+router.use('/member', memberRoutes);         // member + trainer + admin
+
+// ─── Shared Resources ─────────────────────────────────────────────────────────
 router.use('/users', userRoutes);
 router.use('/memberships', membershipRoutes);
 router.use('/inquiries', inquiryRoutes);
-router.use('/admin', adminRoutes);
 router.use('/workouts', workoutRoutes);
 router.use('/diets', dietRoutes);
 router.use('/classes', classRoutes);
