@@ -1,89 +1,28 @@
-import Membership from '../models/Membership.js';
+import { MembershipService } from '../services/MembershipService.js';
+import { sendResponse } from '../utils/responseFormatter.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
-/**
- * @desc    Get all Membership Plans
- * @route   GET /api/v1/memberships
- * @access  Public
- */
-export const getMemberships = async (req, res, next) => {
-  try {
-    const plans = await Membership.find().select('-subscriptions');
-    res.status(200).json({
-      success: true,
-      count: plans.length,
-      data: plans
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getMemberships = asyncHandler(async (req, res) => {
+  const plans = await MembershipService.getAllMemberships();
+  return sendResponse(res, 200, 'Membership plans retrieved successfully.', plans);
+});
 
-/**
- * @desc    Create new Membership Plan (Admin only)
- * @route   POST /api/v1/memberships
- * @access  Private/Admin
- */
-export const createMembership = async (req, res, next) => {
-  try {
-    const { title, price, durationMonths, features, isPopular } = req.body;
-    const slug = title.toLowerCase().replace(/\s+/g, '-');
+export const getMembershipById = asyncHandler(async (req, res) => {
+  const plan = await MembershipService.getMembershipById(req.params.id);
+  return sendResponse(res, 200, 'Membership plan retrieved successfully.', plan);
+});
 
-    const plan = await Membership.create({
-      title,
-      slug,
-      price,
-      durationMonths,
-      features,
-      isPopular
-    });
+export const createMembership = asyncHandler(async (req, res) => {
+  const plan = await MembershipService.createMembership(req.body);
+  return sendResponse(res, 201, 'Membership plan created successfully.', plan);
+});
 
-    res.status(201).json({
-      success: true,
-      message: 'Membership plan created successfully',
-      data: plan
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+export const updateMembership = asyncHandler(async (req, res) => {
+  const updatedPlan = await MembershipService.updateMembership(req.params.id, req.body);
+  return sendResponse(res, 200, 'Membership plan updated successfully.', updatedPlan);
+});
 
-/**
- * @desc    Subscribe User to a Membership Plan
- * @route   POST /api/v1/memberships/:id/subscribe
- * @access  Private
- */
-export const subscribePlan = async (req, res, next) => {
-  try {
-    const plan = await Membership.findById(req.params.id);
-    if (!plan) {
-      return res.status(404).json({ success: false, message: 'Membership plan not found' });
-    }
-
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + plan.durationMonths);
-
-    plan.subscriptions.push({
-      user: req.user._id,
-      startDate,
-      endDate,
-      status: 'active',
-      paymentReference: `PAY-${Date.now()}`
-    });
-
-    await plan.save();
-
-    res.status(200).json({
-      success: true,
-      message: `Successfully subscribed to ${plan.title}`,
-      subscription: {
-        planTitle: plan.title,
-        startDate,
-        endDate,
-        status: 'active'
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+export const deleteMembership = asyncHandler(async (req, res) => {
+  await MembershipService.deleteMembership(req.params.id);
+  return sendResponse(res, 200, 'Membership plan deleted successfully.');
+});

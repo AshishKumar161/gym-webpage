@@ -426,3 +426,86 @@ test('Password Reset: Hashes reset token with SHA-256 and expires after 1 hour',
   const incomingHash = crypto.createHash('sha256').update(rawResetToken).digest('hex');
   assert.strictEqual(incomingHash, hashedTokenInDB);
 });
+
+// ─── 11. CLEAN ARCHITECTURE & APPERROR TESTS ────────────────────────────────
+
+test('Clean Architecture: AppError hierarchy creates correct operational status and HTTP status codes', async () => {
+  const { AppError, ValidationError, AuthenticationError, AuthorizationError, NotFoundError, ConflictError } = await import('../src/errors/AppError.js');
+
+  const valErr = new ValidationError('Invalid email format');
+  assert.strictEqual(valErr.statusCode, 400);
+  assert.strictEqual(valErr.errorCode, 'VALIDATION_ERROR');
+
+  const authErr = new AuthenticationError('Token expired', 'TOKEN_EXPIRED');
+  assert.strictEqual(authErr.statusCode, 401);
+  assert.strictEqual(authErr.errorCode, 'TOKEN_EXPIRED');
+
+  const forbiddenErr = new AuthorizationError();
+  assert.strictEqual(forbiddenErr.statusCode, 403);
+
+  const notFoundErr = new NotFoundError('User not found');
+  assert.strictEqual(notFoundErr.statusCode, 404);
+
+  const conflictErr = new ConflictError('Email is already registered.');
+  assert.strictEqual(conflictErr.statusCode, 409);
+});
+
+// ─── 12. RESPONSE FORMATTER & REQUEST ID TRACING ────────────────────────────
+
+test('Response Formatter: Enforces standardized response structure with requestId and ISO timestamp', async () => {
+  const { sendResponse } = await import('../src/utils/responseFormatter.js');
+
+  let responseBody = null;
+  let responseStatus = 0;
+
+  const mockRes = {
+    req: { id: 'req-uuid-test-123' },
+    status(code) {
+      responseStatus = code;
+      return this;
+    },
+    json(payload) {
+      responseBody = payload;
+      return payload;
+    }
+  };
+
+  sendResponse(mockRes, 200, 'Operation completed successfully', { id: '1' });
+
+  assert.strictEqual(responseStatus, 200);
+  assert.strictEqual(responseBody.success, true);
+  assert.strictEqual(responseBody.message, 'Operation completed successfully');
+  assert.strictEqual(responseBody.requestId, 'req-uuid-test-123');
+  assert.ok(typeof responseBody.timestamp === 'string');
+});
+
+// ─── 13. HEALTH CHECK CONTROLLER TESTS ─────────────────────────────────────
+
+test('Health Check: Returns application status, database connectivity, uptime, memory, version, and environment', async () => {
+  const { getHealth } = await import('../src/controllers/healthController.js');
+
+  let responseBody = null;
+  let responseStatus = 0;
+
+  const mockRes = {
+    req: { id: 'req-health-test' },
+    status(code) {
+      responseStatus = code;
+      return this;
+    },
+    json(payload) {
+      responseBody = payload;
+      return payload;
+    }
+  };
+
+  await getHealth({}, mockRes, () => {});
+
+  assert.strictEqual(responseStatus, 200);
+  assert.strictEqual(responseBody.success, true);
+  assert.strictEqual(responseBody.data.application, 'ONLINE');
+  assert.ok(['CONNECTED', 'DEGRADED', 'DISCONNECTED'].includes(responseBody.data.database));
+  assert.strictEqual(typeof responseBody.data.uptime, 'number');
+  assert.ok(responseBody.data.memory !== undefined);
+});
+

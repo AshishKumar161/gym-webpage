@@ -8,7 +8,11 @@ import { connectPrisma } from './src/config/prisma.js';
 import logger from './src/utils/logger.js';
 import { configureSecurityMiddlewares } from './src/middlewares/securityMiddleware.js';
 import { globalLimiter } from './src/middlewares/rateLimiter.js';
+import { requestIdMiddleware } from './src/middlewares/requestIdMiddleware.js';
 import { notFound, errorHandler } from './src/middlewares/errorMiddleware.js';
+import { setupSwagger } from './src/docs/swagger.js';
+import { getHealth } from './src/controllers/healthController.js';
+
 import apiV1Routes from './src/routes/api/v1/index.js';
 import authRoutes from './src/routes/api/v1/authRoutes.js';
 import adminRoutes from './src/routes/api/v1/adminRoutes.js';
@@ -23,6 +27,9 @@ connectDB();
 connectPrisma();
 
 const app = express();
+
+// Request ID Generation Middleware
+app.use(requestIdMiddleware);
 
 // Security Middlewares (Helmet, CORS with credentials, Mongo Sanitize)
 configureSecurityMiddlewares(app);
@@ -40,6 +47,9 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// Mount Swagger Documentation
+setupSwagger(app);
+
 // Welcome / Root Endpoint
 app.get('/', (req, res) => {
   res.status(200).json({
@@ -47,8 +57,10 @@ app.get('/', (req, res) => {
     message: '🏋️ Welcome to the Gym Management API',
     version: '1.0.0',
     status: 'ONLINE',
+    documentation: '/api/docs',
     endpoints: {
       health: '/health',
+      healthV1: '/api/v1/health',
       auth: {
         register: 'POST /api/v1/auth/register',
         login: 'POST /api/v1/auth/login',
@@ -65,13 +77,7 @@ app.get('/', (req, res) => {
 });
 
 // Health Check Endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    uptime: process.uptime(),
-    timestamp: new Date()
-  });
-});
+app.get('/health', getHealth);
 
 // Direct Auth & Role-Based Routes Mounting for spec compliance (/auth/*, /admin/*, /trainer/*, /member/*)
 app.use('/auth', authRoutes);

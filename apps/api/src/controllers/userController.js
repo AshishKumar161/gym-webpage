@@ -1,70 +1,30 @@
-import User from '../models/User.js';
+import { UserService } from '../services/UserService.js';
+import { sendResponse } from '../utils/responseFormatter.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 import { uploadToCloudinary } from '../config/cloudinary.js';
+import { ValidationError } from '../errors/AppError.js';
 
-/**
- * @desc    Get Current User Profile
- * @route   GET /api/v1/users/me
- * @access  Private
- */
-export const getMe = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user._id);
-    res.status(200).json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    next(error);
+export const getMe = asyncHandler(async (req, res) => {
+  const userId = req.user.id || req.user._id?.toString();
+  const user = await UserService.getUserProfile(userId);
+  return sendResponse(res, 200, 'User profile retrieved successfully.', user);
+});
+
+export const updateProfile = asyncHandler(async (req, res) => {
+  const userId = req.user.id || req.user._id?.toString();
+  const { name, phone } = req.body;
+  const updatedUser = await UserService.updateUserProfile(userId, { name, phone });
+  return sendResponse(res, 200, 'Profile updated successfully.', updatedUser);
+});
+
+export const uploadAvatar = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new ValidationError('Please upload an image file');
   }
-};
 
-/**
- * @desc    Update User Profile
- * @route   PUT /api/v1/users/me
- * @access  Private
- */
-export const updateProfile = async (req, res, next) => {
-  try {
-    const { name, phone } = req.body;
-    const user = await User.findById(req.user._id);
+  const result = await uploadToCloudinary(req.file.buffer, 'a2revampgym/avatars');
+  const userId = req.user.id || req.user._id?.toString();
+  const updatedUser = await UserService.updateUserProfile(userId, { avatar: result.secure_url });
 
-    if (name) user.name = name;
-    if (phone) user.phone = phone;
-
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Profile updated successfully',
-      data: user
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * @desc    Upload Profile Avatar to Cloudinary
- * @route   POST /api/v1/users/me/avatar
- * @access  Private
- */
-export const uploadAvatar = async (req, res, next) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'Please upload an image file' });
-    }
-
-    const result = await uploadToCloudinary(req.file.buffer, 'a2revampgym/avatars');
-    const user = await User.findById(req.user._id);
-    user.avatar = result.secure_url;
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Avatar uploaded successfully',
-      avatarUrl: result.secure_url
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+  return sendResponse(res, 200, 'Avatar uploaded successfully.', { avatarUrl: result.secure_url, user: updatedUser });
+});

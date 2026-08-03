@@ -1,38 +1,22 @@
-import Attendance from '../models/Attendance.js';
+import { AttendanceService } from '../services/AttendanceService.js';
+import { sendResponse } from '../utils/responseFormatter.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
-export const getAttendanceLogs = async (req, res, next) => {
-  try {
-    const filter = req.user.role === 'member' ? { member: req.user._id } : {};
-    const logs = await Attendance.find(filter).populate('member', 'name email').sort({ createdAt: -1 });
+export const checkIn = asyncHandler(async (req, res) => {
+  const userId = req.user.id || req.user._id?.toString();
+  const { method } = req.body;
+  const attendance = await AttendanceService.checkIn(userId, method);
+  return sendResponse(res, 201, 'Check-in recorded successfully.', attendance);
+});
 
-    res.status(200).json({ success: true, count: logs.length, data: logs });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getMyAttendance = asyncHandler(async (req, res) => {
+  const userId = req.user.id || req.user._id?.toString();
+  const records = await AttendanceService.getUserAttendance(userId);
+  return sendResponse(res, 200, 'Attendance history retrieved successfully.', records);
+});
 
-export const checkIn = async (req, res, next) => {
-  try {
-    const { method, memberId } = req.body;
-    const targetMember = memberId || req.user._id;
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    const attendance = await Attendance.create({
-      member: targetMember,
-      date: now,
-      checkInTime: timeStr,
-      method: method || 'QR_CODE',
-      status: 'present'
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Check-in successful! Welcome to A² ReVamp Gym 💪',
-      data: attendance
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getAllAttendance = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 50 } = req.query;
+  const result = await AttendanceService.getAllAttendance({ page: Number(page), limit: Number(limit) });
+  return sendResponse(res, 200, 'All attendance records retrieved successfully.', result.records, { count: result.total });
+});

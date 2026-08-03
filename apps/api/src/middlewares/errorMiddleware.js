@@ -1,39 +1,38 @@
 import logger from '../utils/logger.js';
+import { AppError } from '../errors/AppError.js';
 
 export const notFound = (req, res, next) => {
-  const error = new Error(`Not Found - ${req.originalUrl}`);
-  res.status(404);
+  const error = new AppError(`Not Found - ${req.originalUrl}`, 404, 'NOT_FOUND');
   next(error);
 };
 
 export const errorHandler = (err, req, res, next) => {
-  let statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  let statusCode = err.statusCode || 500;
   let message = err.message || 'Internal Server Error';
+  let errorCode = err.errorCode || 'INTERNAL_SERVER_ERROR';
+  let errors = err.errors || null;
 
-  // Handle Mongoose Bad ObjectId (CastError)
-  if (err.name === 'CastError' && err.kind === 'ObjectId') {
+  // Handle Prisma / Database specific errors
+  if (err.code === 'P2002') {
+    statusCode = 409;
+    message = 'Duplicate field value entered.';
+    errorCode = 'DUPLICATE_KEY_ERROR';
+  } else if (err.code === 'P2025') {
     statusCode = 404;
-    message = 'Resource not found';
+    message = 'Record to update/delete does not exist.';
+    errorCode = 'NOT_FOUND';
   }
 
-  // Handle Mongoose Duplicate Key Error
-  if (err.code === 11000) {
-    statusCode = 400;
-    const field = Object.keys(err.keyValue)[0];
-    message = `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`;
-  }
+  const requestId = req.id || req.headers['x-request-id'] || `req-${Date.now()}`;
 
-  // Handle Mongoose ValidationError
-  if (err.name === 'ValidationError') {
-    statusCode = 400;
-    message = Object.values(err.errors).map(val => val.message).join(', ');
-  }
-
-  logger.error(`API Error [${statusCode}] ${req.method} ${req.originalUrl} - ${message}`);
+  logger.error(`[ERROR] ${req.method} ${req.originalUrl} - ${statusCode} - ${message} | RequestId: ${requestId}`);
 
   res.status(statusCode).json({
     success: false,
     message,
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack
+    errorCode,
+    errors,
+    timestamp: new Date().toISOString(),
+    requestId
   });
 };

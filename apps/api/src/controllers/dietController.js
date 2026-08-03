@@ -1,51 +1,22 @@
-import DietPlan from '../models/DietPlan.js';
+import { DietService } from '../services/DietService.js';
+import { sendResponse } from '../utils/responseFormatter.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
-export const getDietPlans = async (req, res, next) => {
-  try {
-    const filter = req.user.role === 'member' ? { member: req.user._id } : {};
-    const plans = await DietPlan.find(filter)
-      .populate('member', 'name email')
-      .populate('trainer', 'name email');
+export const getMyDietPlans = asyncHandler(async (req, res) => {
+  const memberId = req.user.id || req.user._id?.toString();
+  const plans = await DietService.getMemberDietPlans(memberId);
+  return sendResponse(res, 200, 'Diet plans retrieved successfully.', plans);
+});
 
-    res.status(200).json({ success: true, count: plans.length, data: plans });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getTrainerDietPlans = asyncHandler(async (req, res) => {
+  const trainerId = req.user.id || req.user._id?.toString();
+  const plans = await DietService.getTrainerDietPlans(trainerId);
+  return sendResponse(res, 200, 'Trainer diet plans retrieved successfully.', plans);
+});
 
-export const createDietPlan = async (req, res, next) => {
-  try {
-    const { title, memberId, dailyCaloriesTarget, meals, waterIntakeLiters, instructions } = req.body;
-    const plan = await DietPlan.create({
-      title,
-      member: memberId,
-      trainer: req.user._id,
-      dailyCaloriesTarget,
-      meals,
-      waterIntakeLiters,
-      instructions
-    });
-
-    res.status(201).json({ success: true, message: 'Diet plan created', data: plan });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const updateDietPlan = async (req, res, next) => {
-  try {
-    const plan = await DietPlan.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.status(200).json({ success: true, message: 'Diet plan updated', data: plan });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const deleteDietPlan = async (req, res, next) => {
-  try {
-    await DietPlan.findByIdAndDelete(req.params.id);
-    res.status(200).json({ success: true, message: 'Diet plan deleted' });
-  } catch (error) {
-    next(error);
-  }
-};
+export const createDietPlan = asyncHandler(async (req, res) => {
+  const trainerId = req.user.id || req.user._id?.toString();
+  const { title, memberId, dailyCaloriesTarget, waterIntakeLiters, instructions, meals } = req.body;
+  const plan = await DietService.createDietPlan({ title, memberId, trainerId, dailyCaloriesTarget, waterIntakeLiters, instructions }, meals);
+  return sendResponse(res, 201, 'Diet plan created successfully.', plan);
+});

@@ -1,50 +1,22 @@
-import WorkoutPlan from '../models/WorkoutPlan.js';
+import { WorkoutService } from '../services/WorkoutService.js';
+import { sendResponse } from '../utils/responseFormatter.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
-export const getWorkoutPlans = async (req, res, next) => {
-  try {
-    const filter = req.user.role === 'member' ? { member: req.user._id } : {};
-    const plans = await WorkoutPlan.find(filter)
-      .populate('member', 'name email')
-      .populate('trainer', 'name email');
+export const getMyWorkoutPlans = asyncHandler(async (req, res) => {
+  const memberId = req.user.id || req.user._id?.toString();
+  const plans = await WorkoutService.getMemberWorkoutPlans(memberId);
+  return sendResponse(res, 200, 'Workout plans retrieved successfully.', plans);
+});
 
-    res.status(200).json({ success: true, count: plans.length, data: plans });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getTrainerWorkoutPlans = asyncHandler(async (req, res) => {
+  const trainerId = req.user.id || req.user._id?.toString();
+  const plans = await WorkoutService.getTrainerWorkoutPlans(trainerId);
+  return sendResponse(res, 200, 'Trainer workout plans retrieved successfully.', plans);
+});
 
-export const createWorkoutPlan = async (req, res, next) => {
-  try {
-    const { title, memberId, dayOfWeek, exercises, notes } = req.body;
-    const plan = await WorkoutPlan.create({
-      title,
-      member: memberId,
-      trainer: req.user._id,
-      dayOfWeek,
-      exercises,
-      notes
-    });
-
-    res.status(201).json({ success: true, message: 'Workout plan created', data: plan });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const updateWorkoutPlan = async (req, res, next) => {
-  try {
-    const plan = await WorkoutPlan.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.status(200).json({ success: true, message: 'Workout plan updated', data: plan });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const deleteWorkoutPlan = async (req, res, next) => {
-  try {
-    await WorkoutPlan.findByIdAndDelete(req.params.id);
-    res.status(200).json({ success: true, message: 'Workout plan deleted' });
-  } catch (error) {
-    next(error);
-  }
-};
+export const createWorkoutPlan = asyncHandler(async (req, res) => {
+  const trainerId = req.user.id || req.user._id?.toString();
+  const { title, memberId, dayOfWeek, notes, exercises } = req.body;
+  const plan = await WorkoutService.createWorkoutPlan({ title, memberId, trainerId, dayOfWeek, notes }, exercises);
+  return sendResponse(res, 201, 'Workout plan created successfully.', plan);
+});

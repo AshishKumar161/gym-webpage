@@ -15,8 +15,12 @@ import couponRoutes from './couponRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import attendanceRoutes from './attendanceRoutes.js';
 import aiRoutes from './aiRoutes.js';
+import { getHealth } from '../../../controllers/healthController.js';
 
 const router = express.Router();
+
+// ─── Health Check Endpoint ───────────────────────────────────────────────────
+router.get('/health', getHealth);
 
 // ─── Auth (Public + Protected) ────────────────────────────────────────────────
 router.use('/auth', authRoutes);

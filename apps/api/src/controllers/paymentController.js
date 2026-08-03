@@ -1,42 +1,22 @@
-import Payment from '../models/Payment.js';
+import { PaymentService } from '../services/PaymentService.js';
+import { sendResponse } from '../utils/responseFormatter.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
-export const getPayments = async (req, res, next) => {
-  try {
-    const filter = req.user.role === 'member' ? { member: req.user._id } : {};
-    const payments = await Payment.find(filter).populate('member', 'name email phone').sort({ createdAt: -1 });
+export const createPayment = asyncHandler(async (req, res) => {
+  const userId = req.user.id || req.user._id?.toString();
+  const { planName, amount, paymentMethod } = req.body;
+  const payment = await PaymentService.recordPayment({ userId, planName, amount, paymentMethod });
+  return sendResponse(res, 201, 'Payment processed successfully.', payment);
+});
 
-    res.status(200).json({ success: true, count: payments.length, data: payments });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getMyPayments = asyncHandler(async (req, res) => {
+  const userId = req.user.id || req.user._id?.toString();
+  const payments = await PaymentService.getUserPayments(userId);
+  return sendResponse(res, 200, 'Payment history retrieved successfully.', payments);
+});
 
-export const createPayment = async (req, res, next) => {
-  try {
-    const { memberId, planName, amount, paymentMethod, status } = req.body;
-    const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
-
-    const payment = await Payment.create({
-      invoiceNumber,
-      member: memberId || req.user._id,
-      planName,
-      amount,
-      paymentMethod,
-      status: status || 'paid'
-    });
-
-    res.status(201).json({ success: true, message: 'Invoice generated successfully', data: payment });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const updatePaymentStatus = async (req, res, next) => {
-  try {
-    const { status } = req.body;
-    const payment = await Payment.findByIdAndUpdate(req.params.id, { status }, { new: true });
-    res.status(200).json({ success: true, message: 'Payment status updated', data: payment });
-  } catch (error) {
-    next(error);
-  }
-};
+export const getAllPayments = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 50 } = req.query;
+  const result = await PaymentService.getAllPayments({ page: Number(page), limit: Number(limit) });
+  return sendResponse(res, 200, 'All payment records retrieved successfully.', result.payments, { count: result.total });
+});
