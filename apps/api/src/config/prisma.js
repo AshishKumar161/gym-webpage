@@ -11,20 +11,23 @@ const prisma = new PrismaClient({
  * Prints success message when established and handles connection errors gracefully.
  */
 export const connectPrisma = async () => {
+  if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL environment variable is not defined in .env.');
+    logger.error('[DATABASE] DATABASE_URL environment variable is missing.');
+    process.exit(1);
+  }
+
   try {
-    if (!process.env.DATABASE_URL) {
-      logger.warn('[DATABASE] DATABASE_URL environment variable is not defined in .env. Skipping active database query check.');
-      return;
-    }
     await prisma.$connect();
-    // Raw query check to confirm active connection
     await prisma.$queryRaw`SELECT 1`;
-    logger.info('[DATABASE] Neon PostgreSQL database connected successfully via Prisma.');
-    console.log('✅ Neon PostgreSQL database connection established successfully via Prisma!');
+    logger.info('[DATABASE] Connected to Neon PostgreSQL');
+    console.log('✓ Connected to Neon PostgreSQL');
   } catch (error) {
+    console.error('❌ Prisma Error connecting to Neon PostgreSQL:', error);
     logger.error(`[DATABASE] Neon PostgreSQL connection failed: ${error.message}`);
-    logger.warn('[DATABASE] Please check DATABASE_URL in apps/api/.env or ensure Neon PostgreSQL database is reachable.');
+    process.exit(1);
   }
 };
+
 
 export default prisma;

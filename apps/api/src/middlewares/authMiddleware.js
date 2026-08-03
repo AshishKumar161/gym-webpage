@@ -1,5 +1,5 @@
 import { verifyAccessToken } from '../utils/jwt.js';
-import User from '../models/User.js';
+import { UserRepository } from '../repositories/UserRepository.js';
 import prisma from '../config/prisma.js';
 import logger from '../utils/logger.js';
 
@@ -27,12 +27,8 @@ export const protect = async (req, res, next) => {
 
   try {
     const decoded = verifyAccessToken(token);
-    let user = null;
-    try {
-      user = await prisma.user.findUnique({ where: { id: decoded.id } });
-    } catch {
-      user = await User.findById(decoded.id).select('+auditLogs');
-    }
+    const user = await UserRepository.findById(decoded.id);
+
 
     if (!user) {
       return res.status(401).json({

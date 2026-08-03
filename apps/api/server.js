@@ -3,7 +3,6 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 
-import connectDB from './src/config/db.js';
 import { connectPrisma } from './src/config/prisma.js';
 import logger from './src/utils/logger.js';
 import { configureSecurityMiddlewares } from './src/middlewares/securityMiddleware.js';
@@ -22,9 +21,9 @@ import memberRoutes from './src/routes/api/v1/memberRoutes.js';
 // Load environment variables
 dotenv.config();
 
-// Connect to Databases
-connectDB();
+// Connect to Neon PostgreSQL Database via Prisma
 connectPrisma();
+
 
 const app = express();
 

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import prisma from '../config/prisma.js';
 import { UserRepository } from '../repositories/UserRepository.js';
 import { SessionRepository } from '../repositories/SessionRepository.js';
 import {
@@ -13,10 +14,10 @@ import { ConflictError, AuthenticationError, ValidationError } from '../errors/A
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 export class AuthService {
-  static async registerUser({ name, email, password, phone, avatar, role }) {
+  static async registerUser({ name, email, password, phone, avatar, role, ip = '', userAgent = '' }) {
     const existingUser = await UserRepository.findByEmail(email);
     if (existingUser) {
-      throw new ConflictError('Email is already registered.');
+      throw new ConflictError('Email already registered.');
     }
 
     const salt = await bcrypt.genSalt(12);
@@ -36,8 +37,42 @@ export class AuthService {
       role: userRole
     });
 
-    return { user };
+    // Create Audit Log entry
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          event: 'USER_REGISTERED',
+          ipAddress: ip || '',
+          userAgent: userAgent || '',
+          details: `Registered new account: ${user.email}`
+        }
+      });
+    } catch { /* audit log non-blocking */ }
+
+    // Generate tokens & session
+    const refreshTokenId = crypto.randomUUID();
+    const accessToken = generateAccessToken({ id: user.id, role: user.role, email: user.email });
+    const refreshToken = generateRefreshToken({ id: user.id }, refreshTokenId);
+
+    const { device, browser, os } = parseUserAgent(userAgent);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await SessionRepository.create({
+      userId: user.id,
+      refreshTokenId,
+      refreshTokenHash: hashToken(refreshToken),
+      device,
+      browser,
+      os,
+      ipAddress: ip,
+      userAgent,
+      expiresAt
+    });
+
+    return { user, accessToken, refreshToken };
   }
+
 
   static async loginUser({ email, password, ip, userAgent }) {
     const user = await UserRepository.findByEmail(email);

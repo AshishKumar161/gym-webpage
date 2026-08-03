@@ -5,11 +5,18 @@ import { sendRefreshTokenCookie, clearRefreshTokenCookie } from '../utils/jwt.js
 
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password, phone, avatar, role } = req.body;
+  const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || '').split(',')[0].trim();
+  const userAgent = req.headers['user-agent'] || '';
 
-  const result = await AuthService.registerUser({ name, email, password, phone, avatar, role });
+  const { user, accessToken, refreshToken } = await AuthService.registerUser({ name, email, password, phone, avatar, role, ip, userAgent });
 
-  return sendResponse(res, 201, 'User registered successfully.', { user: result.user }, { user: result.user });
+  if (refreshToken) {
+    sendRefreshTokenCookie(res, refreshToken);
+  }
+
+  return sendResponse(res, 201, 'User registered successfully.', { user, accessToken }, { user, accessToken });
 });
+
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;

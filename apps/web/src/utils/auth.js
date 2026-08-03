@@ -9,7 +9,30 @@
  * - Access token is refreshed 60s before expiry via proactive timer.
  */
 
-const API_BASE = 'http://localhost:5000/api/v1';
+import { API_BASE } from '../config/api.js';
+
+async function safeFetch(url, options) {
+  try {
+    const res = await fetch(url, options);
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+    if (!res.ok) {
+      const msg = data.message || (res.status === 409 ? 'Email already registered.' : res.status === 401 ? 'Invalid email or password.' : 'Request failed');
+      throw new Error(msg);
+    }
+    return data;
+  } catch (err) {
+    if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
+      throw new Error('Cannot connect to server. Please check if the backend API is running.');
+    }
+    throw err;
+  }
+}
+
 
 // In-memory store — never persisted to localStorage
 let _accessToken = null;
@@ -62,14 +85,12 @@ function scheduleRefresh(token) {
  * Register a new user. Returns { success, user } or throws.
  */
 export async function registerUser({ name, email, password, phone = '' }) {
-  const res = await fetch(`${API_BASE}/auth/register`, {
+  const data = await safeFetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify({ name, email, password, phone })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'Registration failed');
 
   _accessToken = data.accessToken;
   _currentUser = data.user;
@@ -82,14 +103,12 @@ export async function registerUser({ name, email, password, phone = '' }) {
  * Login with email & password. Returns { success, user } or throws.
  */
 export async function loginUser({ email, password }) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  const data = await safeFetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify({ email, password })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'Login failed');
 
   _accessToken = data.accessToken;
   _currentUser = data.user;
@@ -97,6 +116,7 @@ export async function loginUser({ email, password }) {
   emit();
   return data;
 }
+
 
 /**
  * Logout current session. Clears memory and removes refresh token cookie via server.

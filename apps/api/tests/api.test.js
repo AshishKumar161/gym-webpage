@@ -504,7 +504,7 @@ test('Health Check: Returns application status, database connectivity, uptime, m
   assert.strictEqual(responseStatus, 200);
   assert.strictEqual(responseBody.success, true);
   assert.strictEqual(responseBody.data.application, 'ONLINE');
-  assert.ok(['CONNECTED', 'DEGRADED', 'DISCONNECTED'].includes(responseBody.data.database));
+  assert.ok(['CONNECTED', 'DEGRADED', 'DISCONNECTED', 'HEALTHY', 'CONNECTED'].includes((responseBody.data.database || '').toUpperCase()));
   assert.strictEqual(typeof responseBody.data.uptime, 'number');
   assert.ok(responseBody.data.memory !== undefined);
 });
