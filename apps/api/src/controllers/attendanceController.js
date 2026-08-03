@@ -20,3 +20,10 @@ export const getAllAttendance = asyncHandler(async (req, res) => {
   const result = await AttendanceService.getAllAttendance({ page: Number(page), limit: Number(limit) });
   return sendResponse(res, 200, 'All attendance records retrieved successfully.', result.records, { count: result.total });
 });
+
+export const getAttendanceLogs = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 50 } = req.query;
+  const result = await AttendanceService.getAllAttendance({ page: Number(page), limit: Number(limit) });
+  return sendResponse(res, 200, 'Attendance logs retrieved successfully.', result.records, { count: result.total });
+});
+

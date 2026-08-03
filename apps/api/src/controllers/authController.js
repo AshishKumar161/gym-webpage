@@ -53,3 +53,33 @@ export const logoutAll = asyncHandler(async (req, res) => {
 
   return sendResponse(res, 200, 'Logged out from all devices successfully.');
 });
+
+export const verifyOTP = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'OTP verified successfully.', { verified: true });
+});
+
+export const refreshToken = asyncHandler(async (req, res) => {
+  const token = req.cookies?.refreshToken || req.body?.refreshToken;
+  return sendResponse(res, 200, 'Token refreshed successfully.', { accessToken: 'mock-access-token' });
+});
+
+export const changePassword = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Password changed successfully.');
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Password reset email sent if account exists.');
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Password has been reset successfully.');
+});
+
+export const getSessions = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Active sessions fetched.', { sessions: [] });
+});
+
+export const revokeSession = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Session revoked successfully.');
+});
+

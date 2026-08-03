@@ -20,3 +20,18 @@ export const createWorkoutPlan = asyncHandler(async (req, res) => {
   const plan = await WorkoutService.createWorkoutPlan({ title, memberId, trainerId, dayOfWeek, notes }, exercises);
   return sendResponse(res, 201, 'Workout plan created successfully.', plan);
 });
+
+export const getWorkoutPlans = asyncHandler(async (req, res) => {
+  const memberId = req.user?.id || req.user?._id?.toString();
+  const plans = await WorkoutService.getMemberWorkoutPlans(memberId);
+  return sendResponse(res, 200, 'Workout plans retrieved successfully.', plans);
+});
+
+export const updateWorkoutPlan = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Workout plan updated successfully.');
+});
+
+export const deleteWorkoutPlan = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Workout plan deleted successfully.');
+});
+

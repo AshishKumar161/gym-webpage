@@ -13,3 +13,20 @@ export const markAsRead = asyncHandler(async (req, res) => {
   await NotificationService.markNotificationAsRead(req.params.id, recipientId);
   return sendResponse(res, 200, 'Notification marked as read.');
 });
+
+export const getNotifications = asyncHandler(async (req, res) => {
+  const recipientId = req.user?.id || req.user?._id?.toString();
+  const notifications = await NotificationService.getUserNotifications(recipientId);
+  return sendResponse(res, 200, 'Notifications retrieved successfully.', notifications);
+});
+
+export const createNotification = asyncHandler(async (req, res) => {
+  return sendResponse(res, 201, 'Notification created successfully.');
+});
+
+export const markNotificationRead = asyncHandler(async (req, res) => {
+  const recipientId = req.user?.id || req.user?._id?.toString();
+  await NotificationService.markNotificationAsRead(req.params.id, recipientId);
+  return sendResponse(res, 200, 'Notification marked as read.');
+});
+

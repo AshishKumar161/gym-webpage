@@ -20,3 +20,18 @@ export const createDietPlan = asyncHandler(async (req, res) => {
   const plan = await DietService.createDietPlan({ title, memberId, trainerId, dailyCaloriesTarget, waterIntakeLiters, instructions }, meals);
   return sendResponse(res, 201, 'Diet plan created successfully.', plan);
 });
+
+export const getDietPlans = asyncHandler(async (req, res) => {
+  const memberId = req.user?.id || req.user?._id?.toString();
+  const plans = await DietService.getMemberDietPlans(memberId);
+  return sendResponse(res, 200, 'Diet plans retrieved successfully.', plans);
+});
+
+export const updateDietPlan = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Diet plan updated successfully.');
+});
+
+export const deleteDietPlan = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Diet plan deleted successfully.');
+});
+

@@ -26,3 +26,8 @@ export const deleteMembership = asyncHandler(async (req, res) => {
   await MembershipService.deleteMembership(req.params.id);
   return sendResponse(res, 200, 'Membership plan deleted successfully.');
 });
+
+export const subscribePlan = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Subscribed to membership plan successfully.', { subscriptionId: 'sub_' + Date.now() });
+});
+

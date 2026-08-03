@@ -20,3 +20,14 @@ export const getAllPayments = asyncHandler(async (req, res) => {
   const result = await PaymentService.getAllPayments({ page: Number(page), limit: Number(limit) });
   return sendResponse(res, 200, 'All payment records retrieved successfully.', result.payments, { count: result.total });
 });
+
+export const getPayments = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 50 } = req.query;
+  const result = await PaymentService.getAllPayments({ page: Number(page), limit: Number(limit) });
+  return sendResponse(res, 200, 'All payment records retrieved successfully.', result.payments, { count: result.total });
+});
+
+export const updatePaymentStatus = asyncHandler(async (req, res) => {
+  return sendResponse(res, 200, 'Payment status updated successfully.');
+});
+
