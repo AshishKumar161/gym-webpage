@@ -22,20 +22,20 @@ const getClientInfo = (req) => ({
 });
 
 /**
- * Hash a token for secure storage (we never store plain refresh tokens in Session).
+ * Hash a token using SHA-256 for secure storage in Session collection.
  */
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 /**
- * Create a Session document for a new login.
- * Refresh token hash is stored, not the plain token.
+ * Create a Session document in MongoDB for a new login/registration.
  */
-const createSession = async (userId, refreshToken, ip, ua) => {
+const createSession = async (userId, refreshToken, refreshTokenId, ip, ua) => {
   const { device, browser, os } = parseUserAgent(ua);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
   const session = await Session.create({
     userId,
+    refreshTokenId,
     refreshTokenHash: hashToken(refreshToken),
     device,
     browser,
@@ -51,8 +51,8 @@ const createSession = async (userId, refreshToken, ip, ua) => {
 // ─── Register ─────────────────────────────────────────────────────────────────
 
 /**
- * @desc    Register new user & send OTP email
- * @route   POST /api/v1/auth/register
+ * @desc    Register new user, hash password, send OTP email, set secure cookie
+ * @route   POST /api/v1/auth/register, POST /auth/register
  * @access  Public
  */
 export const register = async (req, res, next) => {
@@ -68,22 +68,29 @@ export const register = async (req, res, next) => {
     const otp = generateOTP();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
-    const user = await User.create({ name, email, password, phone, otpCode: otp, otpExpires });
+    const user = await User.create({
+      name,
+      email,
+      password,
+      phone,
+      otpCode: otp,
+      otpExpires
+    });
 
-    // Send OTP (non-blocking)
+    // Send OTP email (non-blocking)
     sendOTPEmail(email, name, otp).catch((err) =>
       logger.error(`[MAILER] OTP send failed for ${email}: ${err.message}`)
     );
 
-    const accessToken = generateAccessToken({ id: user._id, role: user.role });
-    const refreshToken = generateRefreshToken({ id: user._id });
+    const refreshTokenId = crypto.randomUUID();
+    const accessToken = generateAccessToken({ id: user._id, role: user.role, email: user.email });
+    const refreshToken = generateRefreshToken({ id: user._id }, refreshTokenId);
 
     // Create session document
-    const sessionId = await createSession(user._id, refreshToken, ip, ua);
+    const sessionId = await createSession(user._id, refreshToken, refreshTokenId, ip, ua);
 
-    // Store in User.refreshTokens (lightweight index for quick lookup)
-    user.refreshTokens.push({ token: refreshToken, ipAddress: ip, userAgent: ua });
-    user.auditLog.push({ event: 'REGISTER', ipAddress: ip, userAgent: ua });
+    user.refreshTokens.push({ token: refreshToken, refreshTokenId, ipAddress: ip, userAgent: ua });
+    user.auditLogs.push({ event: 'REGISTER', ipAddress: ip, userAgent: ua, details: 'User registered' });
     await user.save();
 
     sendRefreshTokenCookie(res, refreshToken);
@@ -94,18 +101,25 @@ export const register = async (req, res, next) => {
       success: true,
       message: 'Account created! A 6-digit OTP has been sent to your email.',
       accessToken,
-      user: { id: user._id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified }
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        isVerified: user.emailVerified
+      }
     });
   } catch (error) {
     next(error);
   }
 };
 
-// ─── Verify OTP ───────────────────────────────────────────────────────────────
+// ─── Verify OTP / Email ────────────────────────────────────────────────────────
 
 /**
- * @desc    Verify email with OTP
- * @route   POST /api/v1/auth/verify-otp
+ * @desc    Verify email with OTP code
+ * @route   POST /api/v1/auth/verify-otp, POST /auth/verify-email
  * @access  Public
  */
 export const verifyOTP = async (req, res, next) => {
@@ -113,16 +127,16 @@ export const verifyOTP = async (req, res, next) => {
     const { email, otp } = req.body;
     const { ip, ua } = getClientInfo(req);
 
-    const user = await User.findOne({ email }).select('+otpCode +otpExpires +auditLog');
+    const user = await User.findOne({ email }).select('+otpCode +otpExpires +auditLogs');
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
-    if (user.isVerified) return res.status(400).json({ success: false, message: 'Email is already verified.' });
+    if (user.emailVerified) return res.status(400).json({ success: false, message: 'Email is already verified.' });
     if (!user.otpCode || user.otpCode !== otp) return res.status(400).json({ success: false, message: 'Invalid OTP code.' });
     if (user.otpExpires && user.otpExpires < new Date()) return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new one.' });
 
-    user.isVerified = true;
+    user.emailVerified = true;
     user.otpCode = undefined;
     user.otpExpires = undefined;
-    user.auditLog.push({ event: 'EMAIL_VERIFIED', ipAddress: ip, userAgent: ua });
+    user.auditLogs.push({ event: 'EMAIL_VERIFIED', ipAddress: ip, userAgent: ua, details: 'Email address verified via OTP' });
     await user.save();
 
     logger.info(`[AUTH] EMAIL_VERIFIED: ${email} | IP: ${ip}`);
@@ -135,8 +149,8 @@ export const verifyOTP = async (req, res, next) => {
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 /**
- * @desc    Login user — validate credentials, enforce lockout, issue tokens, create session
- * @route   POST /api/v1/auth/login
+ * @desc    Login user — bcrypt match, lockout after 5 attempts, store session, set cookie
+ * @route   POST /api/v1/auth/login, POST /auth/login
  * @access  Public
  */
 export const login = async (req, res, next) => {
@@ -144,56 +158,60 @@ export const login = async (req, res, next) => {
     const { email, password } = req.body;
     const { ip, ua } = getClientInfo(req);
 
-    const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil +auditLog');
+    const user = await User.findOne({ email }).select(
+      '+password +failedLoginAttempts +accountLockedUntil +auditLogs +loginAttempts +lockUntil'
+    );
     if (!user) {
-      // Prevent user enumeration — same message as wrong password
+      // Uniform response to prevent user enumeration
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
-    // ── Account Lockout Check ──
+    // ── Check Account Lockout ──
     if (user.isLocked()) {
-      const remaining = Math.ceil((user.lockUntil - Date.now()) / 60000);
+      const remaining = Math.ceil((user.accountLockedUntil - Date.now()) / 60000);
       logger.warn(`[AUTH] LOGIN_BLOCKED (locked): ${email} | IP: ${ip}`);
       return res.status(423).json({
         success: false,
         code: 'ACCOUNT_LOCKED',
-        message: `Account temporarily locked. Try again in ${remaining} minute(s).`
+        message: `Account temporarily locked due to 5 failed attempts. Try again in ${remaining} minute(s).`
       });
     }
 
+    // ── Compare Password with bcrypt.compare() ──
     const isMatch = await user.matchPassword(password);
 
     if (!isMatch) {
       await user.incrementLoginAttempts();
-      user.auditLog.push({ event: 'LOGIN_FAILED', ipAddress: ip, userAgent: ua });
+      user.auditLogs.push({ event: 'FAILED_LOGIN', ipAddress: ip, userAgent: ua, details: 'Incorrect password attempt' });
       await user.save();
-      logger.warn(`[AUTH] LOGIN_FAILED: ${email} | Attempts: ${user.loginAttempts} | IP: ${ip}`);
 
-      const attemptsLeft = Math.max(0, 5 - (user.loginAttempts));
+      logger.warn(`[AUTH] LOGIN_FAILED: ${email} | Failed Attempts: ${user.failedLoginAttempts} | IP: ${ip}`);
+
+      const attemptsLeft = Math.max(0, 5 - (user.failedLoginAttempts || 0));
       return res.status(401).json({
         success: false,
-        message: `Invalid email or password.${attemptsLeft > 0 ? ` ${attemptsLeft} attempt(s) remaining before lockout.` : ' Account is now locked for 30 minutes.'}`
+        message: `Invalid email or password.${attemptsLeft > 0 ? ` ${attemptsLeft} attempt(s) remaining before account lockout.` : ' Account has been locked for 30 minutes.'}`
       });
     }
 
     // ── Successful Login ──
-    user.loginAttempts = 0;
-    user.lockUntil = undefined;
+    await user.resetLoginAttempts();
     user.lastLogin = new Date();
     user.lastLoginIp = ip;
 
-    const accessToken = generateAccessToken({ id: user._id, role: user.role });
-    const refreshToken = generateRefreshToken({ id: user._id });
+    const refreshTokenId = crypto.randomUUID();
+    const accessToken = generateAccessToken({ id: user._id, role: user.role, email: user.email });
+    const refreshToken = generateRefreshToken({ id: user._id }, refreshTokenId);
 
     // Create Session document
-    const sessionId = await createSession(user._id, refreshToken, ip, ua);
+    const sessionId = await createSession(user._id, refreshToken, refreshTokenId, ip, ua);
 
-    // Cap concurrent sessions at 10
+    // Cap active sessions stored in User document at 10
     if (user.refreshTokens.length >= 10) {
       user.refreshTokens = user.refreshTokens.slice(-9);
     }
-    user.refreshTokens.push({ token: refreshToken, ipAddress: ip, userAgent: ua });
-    user.auditLog.push({ event: 'LOGIN', ipAddress: ip, userAgent: ua });
+    user.refreshTokens.push({ token: refreshToken, refreshTokenId, ipAddress: ip, userAgent: ua });
+    user.auditLogs.push({ event: 'LOGIN', ipAddress: ip, userAgent: ua, details: `Login successful from ${ip}` });
     await user.save();
 
     sendRefreshTokenCookie(res, refreshToken);
@@ -208,9 +226,11 @@ export const login = async (req, res, next) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        isVerified: user.isVerified,
+        phone: user.phone,
         avatar: user.avatar,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        isVerified: user.emailVerified,
         lastLogin: user.lastLogin
       }
     });
@@ -219,40 +239,105 @@ export const login = async (req, res, next) => {
   }
 };
 
-// ─── Get Me (Session Restore) ────────────────────────────────────────────────
+// ─── Get Me (Session Restore / User Profile) ──────────────────────────────────
 
 /**
- * @desc    Return current authenticated user profile
- * @route   GET /api/v1/auth/me
- * @access  Private
+ * @desc    Validate session & return current user details
+ * @route   GET /api/v1/auth/me, GET /auth/me
+ * @access  Private (or session restore via refresh cookie)
  */
-export const getMe = async (req, res) => {
-  const user = req.user;
-  res.status(200).json({
-    success: true,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      isVerified: user.isVerified,
-      avatar: user.avatar,
-      phone: user.phone,
-      lastLogin: user.lastLogin
+export const getMe = async (req, res, next) => {
+  try {
+    let user = req.user;
+
+    // If req.user is not set (e.g. access token expired or missing), check refresh cookie
+    if (!user) {
+      const cookieToken = req.cookies?.refreshToken;
+      if (!cookieToken) {
+        return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Not authenticated.' });
+      }
+
+      let decoded;
+      try {
+        decoded = verifyRefreshToken(cookieToken);
+      } catch {
+        clearRefreshTokenCookie(res);
+        return res.status(401).json({ success: false, code: 'SESSION_EXPIRED', message: 'Session expired. Please log in again.' });
+      }
+
+      user = await User.findById(decoded.id).select('+auditLogs');
+      if (!user) {
+        clearRefreshTokenCookie(res);
+        return res.status(401).json({ success: false, message: 'User not found.' });
+      }
+
+      // Check session validity in Session collection
+      const tokenHash = hashToken(cookieToken);
+      const session = await Session.findOne({ userId: user._id, refreshTokenHash: tokenHash, isRevoked: false });
+
+      if (!session) {
+        clearRefreshTokenCookie(res);
+        return res.status(401).json({ success: false, message: 'Session revoked or invalid.' });
+      }
+
+      // Issue new access token & rotate refresh token
+      const newRefreshTokenId = crypto.randomUUID();
+      const newAccessToken = generateAccessToken({ id: user._id, role: user.role, email: user.email });
+      const newRefreshToken = generateRefreshToken({ id: user._id }, newRefreshTokenId);
+
+      session.refreshTokenId = newRefreshTokenId;
+      session.refreshTokenHash = hashToken(newRefreshToken);
+      session.lastActivity = new Date();
+      await session.save();
+
+      sendRefreshTokenCookie(res, newRefreshToken);
+
+      return res.status(200).json({
+        success: true,
+        accessToken: newAccessToken,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          avatar: user.avatar,
+          role: user.role,
+          emailVerified: user.emailVerified,
+          isVerified: user.emailVerified,
+          lastLogin: user.lastLogin
+        }
+      });
     }
-  });
+
+    res.status(200).json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        avatar: user.avatar,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        isVerified: user.emailVerified,
+        lastLogin: user.lastLogin
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
-// ─── Refresh Token ────────────────────────────────────────────────────────────
+// ─── Refresh Token (Rotation & Re-issue) ─────────────────────────────────────
 
 /**
- * @desc    Issue new access token from HttpOnly refresh token cookie (with rotation)
- * @route   POST /api/v1/auth/refresh-token
+ * @desc    Issue new access token & rotate refresh token
+ * @route   POST /api/v1/auth/refresh, POST /api/v1/auth/refresh-token, POST /auth/refresh
  * @access  Public
  */
 export const refreshToken = async (req, res, next) => {
   try {
-    const token = req.cookies.refreshToken;
+    const token = req.cookies?.refreshToken || req.body?.refreshToken;
     if (!token) {
       return res.status(401).json({ success: false, code: 'NO_REFRESH_TOKEN', message: 'Refresh token missing.' });
     }
@@ -265,41 +350,52 @@ export const refreshToken = async (req, res, next) => {
       return res.status(401).json({ success: false, code: 'TOKEN_EXPIRED', message: 'Session expired. Please log in again.' });
     }
 
-    const user = await User.findById(decoded.id).select('+auditLog');
+    const user = await User.findById(decoded.id).select('+auditLogs');
     if (!user) {
       clearRefreshTokenCookie(res);
-      return res.status(401).json({ success: false, message: 'User not found.' });
+      return res.status(401).json({ success: false, message: 'User account not found.' });
     }
 
-    // Check against Session collection (hash-based lookup)
     const tokenHash = hashToken(token);
     const session = await Session.findOne({ userId: user._id, refreshTokenHash: tokenHash, isRevoked: false });
 
     if (!session) {
-      // Token reuse attack detected — revoke ALL sessions
+      // ── Token Reuse Attack Detected — Revoke ALL user sessions ──
       await Session.updateMany({ userId: user._id }, { isRevoked: true });
       user.refreshTokens = [];
-      user.auditLog.push({ event: 'TOKEN_REUSE_DETECTED', ipAddress: getClientInfo(req).ip });
+      user.auditLogs.push({
+        event: 'TOKEN_REUSE_DETECTED',
+        ipAddress: getClientInfo(req).ip,
+        userAgent: getClientInfo(req).ua,
+        details: 'Attempted reuse of revoked or unknown refresh token'
+      });
       await user.save();
       clearRefreshTokenCookie(res);
+
       logger.error(`[AUTH] REFRESH_TOKEN_REUSE: uid=${user._id} — ALL sessions revoked`);
-      return res.status(401).json({ success: false, code: 'TOKEN_REUSE', message: 'Security violation detected. All sessions have been revoked. Please log in again.' });
+      return res.status(401).json({
+        success: false,
+        code: 'TOKEN_REUSE',
+        message: 'Security violation detected. All sessions have been revoked for your protection. Please log in again.'
+      });
     }
 
-    // ── Rotate tokens ──
+    // ── Rotate Tokens ──
     const { ip, ua } = getClientInfo(req);
-    const newAccessToken = generateAccessToken({ id: user._id, role: user.role });
-    const newRefreshToken = generateRefreshToken({ id: user._id });
+    const newRefreshTokenId = crypto.randomUUID();
+    const newAccessToken = generateAccessToken({ id: user._id, role: user.role, email: user.email });
+    const newRefreshToken = generateRefreshToken({ id: user._id }, newRefreshTokenId);
     const newTokenHash = hashToken(newRefreshToken);
 
-    // Update session with new token hash
+    // Update Session document
+    session.refreshTokenId = newRefreshTokenId;
     session.refreshTokenHash = newTokenHash;
     session.lastActivity = new Date();
     await session.save();
 
-    // Update User.refreshTokens inline
-    user.refreshTokens = user.refreshTokens.filter(t => t.token !== token);
-    user.refreshTokens.push({ token: newRefreshToken, ipAddress: ip, userAgent: ua });
+    // Update User refreshTokens inline
+    user.refreshTokens = user.refreshTokens.filter((t) => t.token !== token);
+    user.refreshTokens.push({ token: newRefreshToken, refreshTokenId: newRefreshTokenId, ipAddress: ip, userAgent: ua });
     await user.save();
 
     sendRefreshTokenCookie(res, newRefreshToken);
@@ -313,24 +409,33 @@ export const refreshToken = async (req, res, next) => {
 // ─── Logout ───────────────────────────────────────────────────────────────────
 
 /**
- * @desc    Logout current session — revoke refresh token & session document
- * @route   POST /api/v1/auth/logout
+ * @desc    Logout current session — revoke session document & clear cookie
+ * @route   POST /api/v1/auth/logout, POST /auth/logout
  * @access  Private
  */
 export const logout = async (req, res, next) => {
   try {
-    const token = req.cookies.refreshToken;
+    const token = req.cookies?.refreshToken || req.body?.refreshToken;
     const { ip, ua } = getClientInfo(req);
 
-    if (token && req.user) {
-      const tokenHash = hashToken(token);
-      // Mark session as revoked
-      await Session.findOneAndUpdate(
-        { userId: req.user._id, refreshTokenHash: tokenHash },
-        { isRevoked: true }
-      );
-      req.user.refreshTokens = req.user.refreshTokens.filter(t => t.token !== token);
-      req.user.auditLog.push({ event: 'LOGOUT', ipAddress: ip, userAgent: ua });
+    if (req.user) {
+      if (token) {
+        const tokenHash = hashToken(token);
+        await Session.findOneAndUpdate(
+          { userId: req.user._id, refreshTokenHash: tokenHash },
+          { isRevoked: true }
+        );
+        req.user.refreshTokens = req.user.refreshTokens.filter((t) => t.token !== token);
+      } else {
+        // Revoke most recently updated session if token not passed
+        const latestSession = await Session.findOne({ userId: req.user._id, isRevoked: false }).sort({ lastActivity: -1 });
+        if (latestSession) {
+          latestSession.isRevoked = true;
+          await latestSession.save();
+        }
+      }
+
+      req.user.auditLogs.push({ event: 'LOGOUT', ipAddress: ip, userAgent: ua, details: 'User logged out' });
       await req.user.save();
     }
 
@@ -345,8 +450,8 @@ export const logout = async (req, res, next) => {
 // ─── Logout All Devices ───────────────────────────────────────────────────────
 
 /**
- * @desc    Logout from ALL devices — revoke all refresh tokens and sessions
- * @route   POST /api/v1/auth/logout-all
+ * @desc    Logout from all devices — revoke all sessions & clear cookie
+ * @route   POST /api/v1/auth/logout-all, POST /auth/logout-all
  * @access  Private
  */
 export const logoutAll = async (req, res, next) => {
@@ -355,12 +460,12 @@ export const logoutAll = async (req, res, next) => {
 
     await Session.updateMany({ userId: req.user._id }, { isRevoked: true });
     req.user.refreshTokens = [];
-    req.user.auditLog.push({ event: 'LOGOUT_ALL_DEVICES', ipAddress: ip, userAgent: ua });
+    req.user.auditLogs.push({ event: 'LOGOUT_ALL_DEVICES', ipAddress: ip, userAgent: ua, details: 'Logged out from all active sessions' });
     await req.user.save();
 
     clearRefreshTokenCookie(res);
     logger.info(`[AUTH] LOGOUT_ALL: uid=${req.user._id} | IP: ${ip}`);
-    res.status(200).json({ success: true, message: 'Logged out from all devices.' });
+    res.status(200).json({ success: true, message: 'Logged out from all devices successfully.' });
   } catch (error) {
     next(error);
   }
@@ -369,8 +474,8 @@ export const logoutAll = async (req, res, next) => {
 // ─── Change Password ─────────────────────────────────────────────────────────
 
 /**
- * @desc    Change password while logged in (revokes all sessions)
- * @route   POST /api/v1/auth/change-password
+ * @desc    Change password — verifies current password, hashes new password with bcrypt, revokes sessions
+ * @route   POST /api/v1/auth/change-password, POST /auth/change-password
  * @access  Private
  */
 export const changePassword = async (req, res, next) => {
@@ -378,22 +483,22 @@ export const changePassword = async (req, res, next) => {
     const { currentPassword, newPassword } = req.body;
     const { ip, ua } = getClientInfo(req);
 
-    const user = await User.findById(req.user._id).select('+password +auditLog');
+    const user = await User.findById(req.user._id).select('+password +auditLogs');
     const isMatch = await user.matchPassword(currentPassword);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
     }
 
-    user.password = newPassword;
+    user.password = newPassword; // Pre-save hook will hash with bcrypt
     user.refreshTokens = [];
-    user.auditLog.push({ event: 'PASSWORD_CHANGED', ipAddress: ip, userAgent: ua });
+    user.auditLogs.push({ event: 'PASSWORD_CHANGE', ipAddress: ip, userAgent: ua, details: 'User changed password' });
     await user.save();
 
     await Session.updateMany({ userId: user._id }, { isRevoked: true });
 
     clearRefreshTokenCookie(res);
-    logger.info(`[AUTH] PASSWORD_CHANGED: uid=${user._id} | IP: ${ip}`);
-    res.status(200).json({ success: true, message: 'Password updated. Please log in again.' });
+    logger.info(`[AUTH] PASSWORD_CHANGE: uid=${user._id} | IP: ${ip}`);
+    res.status(200).json({ success: true, message: 'Password updated successfully. Please log in again.' });
   } catch (error) {
     next(error);
   }
@@ -402,8 +507,8 @@ export const changePassword = async (req, res, next) => {
 // ─── Forgot Password ─────────────────────────────────────────────────────────
 
 /**
- * @desc    Send password reset email (prevents email enumeration)
- * @route   POST /api/v1/auth/forgot-password
+ * @desc    Send password reset link via email (prevents email enumeration)
+ * @route   POST /api/v1/auth/forgot-password, POST /auth/forgot-password
  * @access  Public
  */
 export const forgotPassword = async (req, res, next) => {
@@ -411,17 +516,17 @@ export const forgotPassword = async (req, res, next) => {
     const { email } = req.body;
     const { ip, ua } = getClientInfo(req);
 
-    const user = await User.findOne({ email }).select('+auditLog');
+    const user = await User.findOne({ email }).select('+auditLogs');
 
-    // Always respond 200 to prevent email enumeration attacks
+    // Return uniform 200 response to prevent email enumeration
     if (!user) {
-      return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent.' });
+      return res.status(200).json({ success: true, message: 'If that email exists, a password reset link has been sent.' });
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
     user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
     user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    user.auditLog.push({ event: 'PASSWORD_RESET_REQUESTED', ipAddress: ip, userAgent: ua });
+    user.auditLogs.push({ event: 'PASSWORD_RESET_REQUESTED', ipAddress: ip, userAgent: ua, details: 'Password reset link requested' });
     await user.save();
 
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -432,7 +537,7 @@ export const forgotPassword = async (req, res, next) => {
     );
 
     logger.info(`[AUTH] PASSWORD_RESET_REQUESTED: ${email} | IP: ${ip}`);
-    res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent.' });
+    res.status(200).json({ success: true, message: 'If that email exists, a password reset link has been sent.' });
   } catch (error) {
     next(error);
   }
@@ -441,8 +546,8 @@ export const forgotPassword = async (req, res, next) => {
 // ─── Reset Password ───────────────────────────────────────────────────────────
 
 /**
- * @desc    Reset password using time-limited token from email link
- * @route   POST /api/v1/auth/reset-password
+ * @desc    Reset password using reset token from email
+ * @route   POST /api/v1/auth/reset-password, POST /auth/reset-password
  * @access  Public
  */
 export const resetPassword = async (req, res, next) => {
@@ -454,17 +559,17 @@ export const resetPassword = async (req, res, next) => {
     const user = await User.findOne({
       resetPasswordToken: hashedToken,
       resetPasswordExpires: { $gt: new Date() }
-    }).select('+auditLog');
+    }).select('+auditLogs');
 
     if (!user) {
-      return res.status(400).json({ success: false, message: 'Password reset link is invalid or has expired.' });
+      return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });
     }
 
-    user.password = newPassword;
+    user.password = newPassword; // Pre-save hook will hash with bcrypt
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     user.refreshTokens = [];
-    user.auditLog.push({ event: 'PASSWORD_RESET', ipAddress: ip, userAgent: ua });
+    user.auditLogs.push({ event: 'PASSWORD_RESET', ipAddress: ip, userAgent: ua, details: 'Password reset via email token' });
     await user.save();
 
     await Session.updateMany({ userId: user._id }, { isRevoked: true });
@@ -479,8 +584,8 @@ export const resetPassword = async (req, res, next) => {
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
 /**
- * @desc    Get all active sessions for current user
- * @route   GET /api/v1/auth/sessions
+ * @desc    Get all active sessions for logged-in user
+ * @route   GET /api/v1/auth/sessions, GET /auth/sessions
  * @access  Private
  */
 export const getSessions = async (req, res, next) => {
@@ -489,7 +594,9 @@ export const getSessions = async (req, res, next) => {
       userId: req.user._id,
       isRevoked: false,
       expiresAt: { $gt: new Date() }
-    }).select('-refreshTokenHash -userAgent').sort({ lastActivity: -1 });
+    })
+      .select('-refreshTokenHash -userAgent')
+      .sort({ lastActivity: -1 });
 
     res.status(200).json({ success: true, count: sessions.length, sessions });
   } catch (error) {
@@ -498,8 +605,8 @@ export const getSessions = async (req, res, next) => {
 };
 
 /**
- * @desc    Revoke a specific session by ID
- * @route   DELETE /api/v1/auth/sessions/:id
+ * @desc    Revoke a specific session by session ID
+ * @route   DELETE /api/v1/auth/sessions/:id, DELETE /auth/sessions/:id
  * @access  Private
  */
 export const revokeSession = async (req, res, next) => {
@@ -512,8 +619,6 @@ export const revokeSession = async (req, res, next) => {
     session.isRevoked = true;
     await session.save();
 
-    // Also remove from User.refreshTokens (best-effort)
-    // We don't have the plain token in Session, but isRevoked=true blocks refresh
     logger.info(`[AUTH] SESSION_REVOKED: sessionId=${session._id} | uid=${req.user._id}`);
     res.status(200).json({ success: true, message: 'Session revoked successfully.' });
   } catch (error) {

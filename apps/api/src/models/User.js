@@ -5,6 +5,7 @@ const auditLogSchema = new mongoose.Schema({
   event: { type: String, required: true },
   ipAddress: { type: String, default: '' },
   userAgent: { type: String, default: '' },
+  details: { type: String, default: '' },
   timestamp: { type: Date, default: Date.now }
 }, { _id: false });
 
@@ -49,7 +50,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
-    isVerified: {
+    emailVerified: {
       type: Boolean,
       default: false,
       index: true
@@ -64,8 +65,8 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpires: { type: Date, default: null, select: false },
 
     // Account Lockout (5 failed login attempts)
-    loginAttempts: { type: Number, default: 0, select: false },
-    lockUntil: { type: Date, default: null, select: false },
+    failedLoginAttempts: { type: Number, default: 0, select: false },
+    accountLockedUntil: { type: Date, default: null, select: false },
 
     // Session tracking
     lastLogin: { type: Date, default: null },
@@ -75,6 +76,7 @@ const userSchema = new mongoose.Schema(
     refreshTokens: [
       {
         token: { type: String, required: true },
+        refreshTokenId: { type: String, default: '' },
         userAgent: { type: String, default: '' },
         ipAddress: { type: String, default: '' },
         createdAt: { type: Date, default: Date.now }
@@ -82,16 +84,37 @@ const userSchema = new mongoose.Schema(
     ],
 
     // Security Audit Log
-    auditLog: {
+    auditLogs: {
       type: [auditLogSchema],
       default: [],
       select: false
     }
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
 
-// Hash password before saving
+// Backward compatibility virtuals
+userSchema.virtual('isVerified')
+  .get(function () { return this.emailVerified; })
+  .set(function (v) { this.emailVerified = v; });
+
+userSchema.virtual('loginAttempts')
+  .get(function () { return this.failedLoginAttempts; })
+  .set(function (v) { this.failedLoginAttempts = v; });
+
+userSchema.virtual('lockUntil')
+  .get(function () { return this.accountLockedUntil; })
+  .set(function (v) { this.accountLockedUntil = v; });
+
+userSchema.virtual('auditLog')
+  .get(function () { return this.auditLogs; })
+  .set(function (v) { this.auditLogs = v; });
+
+// Hash password with bcrypt before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   const salt = await bcrypt.genSalt(12);
@@ -99,27 +122,26 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-// Match password helper
+// Match password helper using bcrypt.compare()
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
 // Check if account is locked
 userSchema.methods.isLocked = function () {
-  return this.lockUntil && this.lockUntil > Date.now();
+  return Boolean(this.accountLockedUntil && this.accountLockedUntil > Date.now());
 };
 
 // Increment failed login attempts (lock after 5)
 userSchema.methods.incrementLoginAttempts = async function () {
-  // Reset if lock has expired
-  if (this.lockUntil && this.lockUntil < Date.now()) {
-    this.loginAttempts = 1;
-    this.lockUntil = null;
+  if (this.accountLockedUntil && this.accountLockedUntil < Date.now()) {
+    this.failedLoginAttempts = 1;
+    this.accountLockedUntil = null;
   } else {
-    this.loginAttempts += 1;
-    if (this.loginAttempts >= 5) {
+    this.failedLoginAttempts = (this.failedLoginAttempts || 0) + 1;
+    if (this.failedLoginAttempts >= 5) {
       // Lock for 30 minutes
-      this.lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+      this.accountLockedUntil = new Date(Date.now() + 30 * 60 * 1000);
     }
   }
   return this.save();
@@ -127,16 +149,17 @@ userSchema.methods.incrementLoginAttempts = async function () {
 
 // Reset login attempts on successful login
 userSchema.methods.resetLoginAttempts = async function () {
-  this.loginAttempts = 0;
-  this.lockUntil = null;
+  this.failedLoginAttempts = 0;
+  this.accountLockedUntil = null;
   return this.save();
 };
 
 // Add audit log entry (cap at last 100 entries)
-userSchema.methods.addAuditLog = async function (event, ipAddress = '', userAgent = '') {
-  this.auditLog.push({ event, ipAddress, userAgent });
-  if (this.auditLog.length > 100) {
-    this.auditLog = this.auditLog.slice(-100);
+userSchema.methods.addAuditLog = async function (event, ipAddress = '', userAgent = '', details = '') {
+  if (!this.auditLogs) this.auditLogs = [];
+  this.auditLogs.push({ event, ipAddress, userAgent, details, timestamp: new Date() });
+  if (this.auditLogs.length > 100) {
+    this.auditLogs = this.auditLogs.slice(-100);
   }
   return this.save();
 };

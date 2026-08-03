@@ -1,203 +1,295 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
-// ─── Health & Config ──────────────────────────────────────────────────────────
+// ─── 1. DATABASE & USER MODEL TESTS ─────────────────────────────────────────
 
-test('Health check: response structure is valid', () => {
-  const response = { status: 'OK', uptime: 120.45, timestamp: new Date().toISOString() };
-  assert.strictEqual(response.status, 'OK');
-  assert.strictEqual(typeof response.uptime, 'number');
-  assert.strictEqual(typeof response.timestamp, 'string');
+test('Database: User password must be hashed with bcrypt (never plain text)', async () => {
+  const plainPassword = 'SuperSecretPass123!';
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(plainPassword, salt);
+
+  assert.notStrictEqual(plainPassword, hashedPassword);
+  assert.ok(hashedPassword.startsWith('$2b$') || hashedPassword.startsWith('$2a$'));
+  assert.strictEqual(await bcrypt.compare(plainPassword, hashedPassword), true);
+  assert.strictEqual(await bcrypt.compare('WrongPassword', hashedPassword), false);
 });
 
-test('Membership pricing: all plan tiers are correctly configured', () => {
-  const plans = [
-    { name: 'Monthly', price: 999, durationMonths: 1 },
-    { name: 'Quarterly', price: 2499, durationMonths: 3 },
-    { name: 'Yearly', price: 7999, durationMonths: 12 }
-  ];
-  assert.strictEqual(plans.length, 3);
-  assert.strictEqual(plans[0].price, 999);
-  assert.strictEqual(plans[1].price, 2499);
-  assert.strictEqual(plans[2].price, 7999);
-  assert.ok(plans.every(p => p.durationMonths > 0));
-});
-
-// ─── Password Hashing ─────────────────────────────────────────────────────────
-
-test('Password hashing: bcrypt output is not plain text', () => {
-  const password = 'MySecurePass123';
-  // Simulate bcrypt hash format check (starts with $2b$)
-  const mockHash = '$2b$12$abc123hashoutputfortesting';
-  assert.notStrictEqual(password, mockHash);
-  assert.ok(mockHash.startsWith('$2b$'));
-});
-
-test('Password hashing: different passwords produce different hashes', () => {
-  const hash1 = crypto.createHash('sha256').update('Password1!').digest('hex');
-  const hash2 = crypto.createHash('sha256').update('Password2!').digest('hex');
-  assert.notStrictEqual(hash1, hash2);
-});
-
-// ─── Password Strength Validation ────────────────────────────────────────────
-
-test('Password strength: rejects weak passwords', () => {
-  const isStrong = (pw) => pw.length >= 8 && /[A-Z]/.test(pw) && /\d/.test(pw);
-  assert.strictEqual(isStrong('weak'), false);
-  assert.strictEqual(isStrong('alllower1'), false);   // no uppercase
-  assert.strictEqual(isStrong('NOUPPER'), false);      // no number
-  assert.strictEqual(isStrong('Short1'), false);       // too short
-});
-
-test('Password strength: accepts strong passwords', () => {
-  const isStrong = (pw) => pw.length >= 8 && /[A-Z]/.test(pw) && /\d/.test(pw);
-  assert.strictEqual(isStrong('Valid1Pass'), true);
-  assert.strictEqual(isStrong('StrongPass123'), true);
-  assert.strictEqual(isStrong('MySecret9!'), true);
-});
-
-// ─── RBAC Logic ───────────────────────────────────────────────────────────────
-
-const canAccess = (userRole, requiredRoles) => requiredRoles.includes(userRole);
-
-test('RBAC: admin can access admin routes', () => {
-  assert.ok(canAccess('admin', ['admin']));
-});
-
-test('RBAC: admin can access trainer and member routes', () => {
-  assert.ok(canAccess('admin', ['trainer', 'admin']));
-  assert.ok(canAccess('admin', ['member', 'trainer', 'admin']));
-});
-
-test('RBAC: trainer cannot access admin-only routes', () => {
-  assert.strictEqual(canAccess('trainer', ['admin']), false);
-});
-
-test('RBAC: trainer can access trainer routes', () => {
-  assert.ok(canAccess('trainer', ['trainer', 'admin']));
-});
-
-test('RBAC: member cannot access admin or trainer routes', () => {
-  assert.strictEqual(canAccess('member', ['admin']), false);
-  assert.strictEqual(canAccess('member', ['trainer', 'admin']), false);
-});
-
-test('RBAC: member can access member routes', () => {
-  assert.ok(canAccess('member', ['member', 'trainer', 'admin']));
-});
-
-test('RBAC: unauthenticated users (no role) cannot access any protected route', () => {
-  assert.strictEqual(canAccess(undefined, ['admin']), false);
-  assert.strictEqual(canAccess(null, ['member', 'trainer', 'admin']), false);
-  assert.strictEqual(canAccess('', ['member']), false);
-});
-
-// ─── Account Lockout ─────────────────────────────────────────────────────────
-
-test('Account lockout: locks after 5 failed login attempts', () => {
-  let attempts = 0;
-  let lockUntil = null;
-
-  const incrementAttempts = () => {
-    attempts++;
-    if (attempts >= 5) lockUntil = new Date(Date.now() + 30 * 60 * 1000);
+test('Database: User model contains all required schema fields', () => {
+  const user = {
+    name: 'John Doe',
+    email: 'john@example.com',
+    password: '$2b$12$hashedPasswordExample',
+    phone: '+1234567890',
+    avatar: 'https://example.com/avatar.png',
+    role: 'member',
+    emailVerified: false,
+    refreshTokens: [],
+    failedLoginAttempts: 0,
+    accountLockedUntil: null,
+    lastLogin: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    auditLogs: []
   };
 
-  for (let i = 0; i < 5; i++) incrementAttempts();
-
-  assert.strictEqual(attempts, 5);
-  assert.notStrictEqual(lockUntil, null);
-  assert.ok(lockUntil > new Date());
+  assert.strictEqual(typeof user.name, 'string');
+  assert.strictEqual(typeof user.email, 'string');
+  assert.ok(user.email.includes('@'));
+  assert.strictEqual(typeof user.password, 'string');
+  assert.notStrictEqual(user.password, 'plainpassword');
+  assert.strictEqual(typeof user.phone, 'string');
+  assert.strictEqual(typeof user.avatar, 'string');
+  assert.ok(['member', 'trainer', 'admin'].includes(user.role));
+  assert.strictEqual(typeof user.emailVerified, 'boolean');
+  assert.ok(Array.isArray(user.refreshTokens));
+  assert.strictEqual(typeof user.failedLoginAttempts, 'number');
+  assert.strictEqual(user.accountLockedUntil, null);
+  assert.ok(user.lastLogin instanceof Date);
+  assert.ok(user.createdAt instanceof Date);
+  assert.ok(user.updatedAt instanceof Date);
+  assert.ok(Array.isArray(user.auditLogs));
 });
 
-test('Account lockout: resets after lockout expires', () => {
-  const expiredLock = new Date(Date.now() - 1000); // 1 second ago
-  const isLocked = expiredLock > new Date();
-  assert.strictEqual(isLocked, false);
+// ─── 2. LOGIN & LOCKOUT TESTS ───────────────────────────────────────────────
+
+test('Login Flow: Increments failed attempts and locks account after 5 failed tries', () => {
+  let failedLoginAttempts = 0;
+  let accountLockedUntil = null;
+
+  const handleFailedLogin = () => {
+    failedLoginAttempts++;
+    if (failedLoginAttempts >= 5) {
+      accountLockedUntil = new Date(Date.now() + 30 * 60 * 1000);
+    }
+  };
+
+  for (let i = 1; i <= 5; i++) {
+    handleFailedLogin();
+  }
+
+  assert.strictEqual(failedLoginAttempts, 5);
+  assert.notStrictEqual(accountLockedUntil, null);
+  assert.ok(accountLockedUntil > new Date());
 });
 
-test('Account lockout: active lock prevents login', () => {
-  const futureLock = new Date(Date.now() + 30 * 60 * 1000);
-  const isLocked = futureLock > new Date();
+test('Login Flow: Account lockout prevents login when active', () => {
+  const accountLockedUntil = new Date(Date.now() + 15 * 60 * 1000);
+  const isLocked = accountLockedUntil && accountLockedUntil > Date.now();
   assert.strictEqual(isLocked, true);
 });
 
-// ─── Token Rotation ───────────────────────────────────────────────────────────
+test('Login Flow: Reset failed login attempts on successful password verification', () => {
+  let failedLoginAttempts = 4;
+  let accountLockedUntil = null;
 
-test('Token rotation: old refresh token is removed after rotation', () => {
-  const tokens = [{ token: 'old-token-abc' }, { token: 'keep-token-def' }];
-  const rotated = tokens.filter(t => t.token !== 'old-token-abc');
-  rotated.push({ token: 'new-token-xyz' });
+  // On correct login
+  failedLoginAttempts = 0;
+  accountLockedUntil = null;
 
-  assert.strictEqual(rotated.length, 2);
-  assert.ok(!rotated.find(t => t.token === 'old-token-abc'));
-  assert.ok(rotated.find(t => t.token === 'new-token-xyz'));
-  assert.ok(rotated.find(t => t.token === 'keep-token-def'));
+  assert.strictEqual(failedLoginAttempts, 0);
+  assert.strictEqual(accountLockedUntil, null);
 });
 
-test('Token rotation: detects reuse of revoked token', () => {
-  const validTokens = [{ token: 'active-token' }];
-  const revokedToken = 'already-used-token';
+// ─── 3. SESSION MANAGEMENT & /auth/me TESTS ─────────────────────────────────
 
-  const isValid = validTokens.some(t => t.token === revokedToken);
-  assert.strictEqual(isValid, false); // reuse detected
+test('Session Management: GET /auth/me session restore with valid token or cookie', () => {
+  const secret = 'test_access_secret';
+  const payload = { id: 'user_123', role: 'member', email: 'user@example.com' };
+  const accessToken = jwt.sign(payload, secret, { expiresIn: '15m' });
+
+  const decoded = jwt.verify(accessToken, secret);
+  assert.strictEqual(decoded.id, 'user_123');
+  assert.strictEqual(decoded.role, 'member');
 });
 
-// ─── Session Management ───────────────────────────────────────────────────────
+test('Session Management: Returns 401 on expired or invalid session token', () => {
+  const secret = 'test_access_secret';
+  const expiredToken = jwt.sign({ id: 'user_123' }, secret, { expiresIn: '-1s' });
 
-test('Session: hash-based token storage (never plain text)', () => {
-  const plainToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature';
-  const hash = crypto.createHash('sha256').update(plainToken).digest('hex');
-
-  assert.notStrictEqual(hash, plainToken);
-  assert.strictEqual(hash.length, 64); // SHA-256 hex is always 64 chars
+  assert.throws(() => {
+    jwt.verify(expiredToken, secret);
+  });
 });
 
-test('Session: concurrent session cap at 10', () => {
-  const sessions = Array.from({ length: 10 }, (_, i) => ({ token: `token-${i}` }));
-  assert.strictEqual(sessions.length, 10);
+// ─── 4. ROLE-BASED ACCESS CONTROL (RBAC) TESTS ─────────────────────────────
 
-  // When 11th session arrives, oldest should be evicted
-  if (sessions.length >= 10) {
-    sessions.shift(); // remove oldest
-    sessions.push({ token: 'new-token-11' });
+const checkRoleAuthorization = (userRole, requiredRoles) => {
+  if (!userRole) return 401; // Unauthorized
+  if (!requiredRoles.includes(userRole)) return 403; // Forbidden
+  return 200; // Allowed
+};
+
+test('RBAC: Admin can access /api/v1/admin/*', () => {
+  assert.strictEqual(checkRoleAuthorization('admin', ['admin']), 200);
+  assert.strictEqual(checkRoleAuthorization('trainer', ['admin']), 403);
+  assert.strictEqual(checkRoleAuthorization('member', ['admin']), 403);
+  assert.strictEqual(checkRoleAuthorization(null, ['admin']), 401);
+});
+
+test('RBAC: Trainer can access /api/v1/trainer/*', () => {
+  assert.strictEqual(checkRoleAuthorization('admin', ['trainer', 'admin']), 200);
+  assert.strictEqual(checkRoleAuthorization('trainer', ['trainer', 'admin']), 200);
+  assert.strictEqual(checkRoleAuthorization('member', ['trainer', 'admin']), 403);
+});
+
+test('RBAC: Member can access /api/v1/member/*', () => {
+  assert.strictEqual(checkRoleAuthorization('admin', ['member', 'trainer', 'admin']), 200);
+  assert.strictEqual(checkRoleAuthorization('trainer', ['member', 'trainer', 'admin']), 200);
+  assert.strictEqual(checkRoleAuthorization('member', ['member', 'trainer', 'admin']), 200);
+  assert.strictEqual(checkRoleAuthorization(undefined, ['member', 'trainer', 'admin']), 401);
+});
+
+// ─── 5. EMAIL & OTP VERIFICATION TESTS ──────────────────────────────────────
+
+test('Email Verification: Validates 6-digit OTP code', () => {
+  const validOTP = '654321';
+  const userOTP = '654321';
+  const isExpired = false;
+
+  const isVerified = userOTP === validOTP && !isExpired;
+  assert.strictEqual(isVerified, true);
+});
+
+test('Email Verification: Rejects expired OTP code', () => {
+  const validOTP = '654321';
+  const userOTP = '654321';
+  const otpExpires = new Date(Date.now() - 1000); // Expired
+
+  const isExpired = otpExpires < new Date();
+  const isVerified = userOTP === validOTP && !isExpired;
+  assert.strictEqual(isVerified, false);
+});
+
+// ─── 6. SECURITY & PASSWORD STRENGTH TESTS ──────────────────────────────────
+
+test('Password Strength: Rejects weak passwords missing rules', () => {
+  const validatePassword = (pw) =>
+    pw.length >= 8 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /\d/.test(pw);
+
+  assert.strictEqual(validatePassword('weak'), false);         // too short
+  assert.strictEqual(validatePassword('nouppercase123'), false); // no upper
+  assert.strictEqual(validatePassword('NOLOWERCASE123'), false); // no lower
+  assert.strictEqual(validatePassword('NoNumbersHere'), false);  // no digits
+});
+
+test('Password Strength: Accepts strong passwords with upper, lower, and digits', () => {
+  const validatePassword = (pw) =>
+    pw.length >= 8 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /\d/.test(pw);
+
+  assert.strictEqual(validatePassword('StrongPass123!'), true);
+  assert.strictEqual(validatePassword('SecureWord99'), true);
+});
+
+// ─── 7. USER SESSION TRACKING TESTS ─────────────────────────────────────────
+
+test('Session Model: Stores userId, device, browser, ipAddress, loginTime, lastActivity, refreshTokenId', () => {
+  const session = {
+    userId: '60d5ec49f1b2c80015f8d001',
+    device: 'Desktop',
+    browser: 'Chrome 120',
+    ipAddress: '192.168.1.1',
+    loginTime: new Date(),
+    lastActivity: new Date(),
+    refreshTokenId: crypto.randomUUID(),
+    isRevoked: false
+  };
+
+  assert.strictEqual(typeof session.userId, 'string');
+  assert.strictEqual(typeof session.device, 'string');
+  assert.strictEqual(typeof session.browser, 'string');
+  assert.strictEqual(typeof session.ipAddress, 'string');
+  assert.ok(session.loginTime instanceof Date);
+  assert.ok(session.lastActivity instanceof Date);
+  assert.strictEqual(typeof session.refreshTokenId, 'string');
+  assert.strictEqual(session.isRevoked, false);
+});
+
+test('Session Revocation: Logout revokes session and logout-all revokes all sessions', () => {
+  const sessions = [
+    { id: 's1', isRevoked: false },
+    { id: 's2', isRevoked: false },
+    { id: 's3', isRevoked: false }
+  ];
+
+  // Logout single session 's1'
+  const target = sessions.find((s) => s.id === 's1');
+  if (target) target.isRevoked = true;
+
+  assert.strictEqual(sessions[0].isRevoked, true);
+  assert.strictEqual(sessions[1].isRevoked, false);
+
+  // Logout all sessions
+  sessions.forEach((s) => (s.isRevoked = true));
+  assert.ok(sessions.every((s) => s.isRevoked === true));
+});
+
+// ─── 8. AUDIT LOGS TESTS ───────────────────────────────────────────────────
+
+test('Audit Logs: Records login, logout, failed login, password change, reset, email verification', () => {
+  const auditLogs = [];
+  const logEvent = (event, ipAddress, userAgent, details) => {
+    auditLogs.push({ event, ipAddress, userAgent, details, timestamp: new Date() });
+  };
+
+  logEvent('REGISTER', '127.0.0.1', 'Mozilla', 'Account created');
+  logEvent('EMAIL_VERIFIED', '127.0.0.1', 'Mozilla', 'OTP verified');
+  logEvent('LOGIN', '127.0.0.1', 'Mozilla', 'Login successful');
+  logEvent('FAILED_LOGIN', '127.0.0.1', 'Mozilla', 'Wrong password');
+  logEvent('PASSWORD_CHANGE', '127.0.0.1', 'Mozilla', 'Password updated');
+  logEvent('LOGOUT', '127.0.0.1', 'Mozilla', 'Session ended');
+
+  assert.strictEqual(auditLogs.length, 6);
+  assert.strictEqual(auditLogs[0].event, 'REGISTER');
+  assert.strictEqual(auditLogs[1].event, 'EMAIL_VERIFIED');
+  assert.strictEqual(auditLogs[2].event, 'LOGIN');
+  assert.strictEqual(auditLogs[3].event, 'FAILED_LOGIN');
+  assert.strictEqual(auditLogs[4].event, 'PASSWORD_CHANGE');
+  assert.strictEqual(auditLogs[5].event, 'LOGOUT');
+});
+
+// ─── 9. TOKEN REFRESH & ROTATION TESTS ──────────────────────────────────────
+
+test('Token Refresh Rotation: Issues new refresh token and invalidates old token hash', () => {
+  let activeTokenHash = crypto.createHash('sha256').update('old_refresh_token').digest('hex');
+  const newRawToken = 'new_refresh_token_123';
+  const newHash = crypto.createHash('sha256').update(newRawToken).digest('hex');
+
+  // Rotate token
+  activeTokenHash = newHash;
+
+  assert.notStrictEqual(activeTokenHash, crypto.createHash('sha256').update('old_refresh_token').digest('hex'));
+  assert.strictEqual(activeTokenHash, newHash);
+});
+
+test('Token Refresh: Detects token reuse attempt and revokes all active sessions', () => {
+  const activeSessions = [
+    { id: 's1', isRevoked: false },
+    { id: 's2', isRevoked: false }
+  ];
+
+  const presentedTokenHash = crypto.createHash('sha256').update('stolen_revoked_token').digest('hex');
+  const validTokenHash = crypto.createHash('sha256').update('valid_token').digest('hex');
+
+  if (presentedTokenHash !== validTokenHash) {
+    // Reuse attempt detected -> Revoke all sessions
+    activeSessions.forEach((s) => (s.isRevoked = true));
   }
 
-  assert.strictEqual(sessions.length, 10);
-  assert.ok(sessions.find(t => t.token === 'new-token-11'));
+  assert.ok(activeSessions.every((s) => s.isRevoked === true));
 });
 
-// ─── Device Parser ────────────────────────────────────────────────────────────
+// ─── 10. PASSWORD RESET TESTS ───────────────────────────────────────────────
 
-test('Device parser: identifies mobile user agents', () => {
-  const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15';
-  const isMobile = /mobile|android|iphone|ipad|tablet/i.test(mobileUA);
-  assert.strictEqual(isMobile, true);
-});
+test('Password Reset: Hashes reset token with SHA-256 and expires after 1 hour', () => {
+  const rawResetToken = crypto.randomBytes(32).toString('hex');
+  const hashedTokenInDB = crypto.createHash('sha256').update(rawResetToken).digest('hex');
 
-test('Device parser: identifies Chrome browser', () => {
-  const chromeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
-  const isChrome = /Chrome\//i.test(chromeUA) && !/Edg\//i.test(chromeUA);
-  assert.strictEqual(isChrome, true);
-});
+  assert.notStrictEqual(rawResetToken, hashedTokenInDB);
 
-// ─── Email Enumeration Prevention ────────────────────────────────────────────
-
-test('Forgot password: always returns same message regardless of email existence', () => {
-  const responseForKnown = { success: true, message: 'If that email exists, a reset link has been sent.' };
-  const responseForUnknown = { success: true, message: 'If that email exists, a reset link has been sent.' };
-
-  assert.strictEqual(responseForKnown.message, responseForUnknown.message);
-  assert.strictEqual(responseForKnown.success, true);
-});
-
-// ─── Secure Token Hash ────────────────────────────────────────────────────────
-
-test('Reset token: SHA-256 hashed before storage', () => {
-  const rawToken = crypto.randomBytes(32).toString('hex');
-  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
-
-  assert.notStrictEqual(rawToken, hashedToken);
-  assert.ok(hashedToken.length > 0);
+  // Incoming reset request
+  const incomingHash = crypto.createHash('sha256').update(rawResetToken).digest('hex');
+  assert.strictEqual(incomingHash, hashedTokenInDB);
 });

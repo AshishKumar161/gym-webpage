@@ -9,16 +9,17 @@ import { configureSecurityMiddlewares } from './src/middlewares/securityMiddlewa
 import { globalLimiter } from './src/middlewares/rateLimiter.js';
 import { notFound, errorHandler } from './src/middlewares/errorMiddleware.js';
 import apiV1Routes from './src/routes/api/v1/index.js';
+import authRoutes from './src/routes/api/v1/authRoutes.js';
 
 // Load environment variables
 dotenv.config();
 
-// Connect to MongoDB
+// Connect to MongoDB (non-blocking connection attempt in dev/test)
 connectDB();
 
 const app = express();
 
-// Security Middlewares (Helmet, CORS, Mongo Sanitize)
+// Security Middlewares (Helmet, CORS with credentials, Mongo Sanitize)
 configureSecurityMiddlewares(app);
 
 // Global Rate Limiting
@@ -43,6 +44,10 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Direct Auth routes mounting for spec compliance (/auth/* and /api/auth/*)
+app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
+
 // API Routes (Version 1)
 app.use('/api/v1', apiV1Routes);
 
@@ -52,12 +57,16 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-  logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  const server = app.listen(PORT, () => {
+    logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  logger.error(`Unhandled Rejection: ${err.message}`);
-  server.close(() => process.exit(1));
-});
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (err) => {
+    logger.error(`Unhandled Rejection: ${err.message}`);
+    server.close(() => process.exit(1));
+  });
+}
+
+export default app;

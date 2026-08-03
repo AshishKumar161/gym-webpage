@@ -3,8 +3,8 @@ import User from '../models/User.js';
 import logger from '../utils/logger.js';
 
 /**
- * authenticate() — Protect routes by verifying JWT Bearer token.
- * Attaches the full user document to req.user.
+ * protect — Middleware to authenticate requests via JWT Bearer token or HttpOnly Cookie.
+ * Attaches the authenticated user object to req.user.
  */
 export const protect = async (req, res, next) => {
   let token;
@@ -14,6 +14,10 @@ export const protect = async (req, res, next) => {
   }
 
   if (!token) {
+    // If route is /me or optional auth route, allow next() to handle cookie session restore
+    if (req.path === '/me' || req.path === '/auth/me') {
+      return next();
+    }
     return res.status(401).json({
       success: false,
       code: 'UNAUTHORIZED',
@@ -23,7 +27,7 @@ export const protect = async (req, res, next) => {
 
   try {
     const decoded = verifyAccessToken(token);
-    const user = await User.findById(decoded.id).select('+auditLog');
+    const user = await User.findById(decoded.id).select('+auditLogs');
 
     if (!user) {
       return res.status(401).json({
@@ -36,6 +40,10 @@ export const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
+    // If token expired and endpoint is /me, allow next() for cookie session recovery
+    if (req.path === '/me' || req.path === '/auth/me') {
+      return next();
+    }
     logger.error(`[AUTH] JWT Error: ${error.message}`);
     return res.status(401).json({
       success: false,
@@ -46,17 +54,20 @@ export const protect = async (req, res, next) => {
 };
 
 /**
- * authorize(...roles) — Role-based access control middleware.
- * Must be used AFTER protect().
- *
+ * authorize(...roles) — Backend Role-Based Access Control (RBAC) middleware.
  * Usage:
- *   router.get('/admin-only', protect, authorize('admin'), handler)
- *   router.get('/staff', protect, authorize('admin', 'trainer'), handler)
+ *   router.use('/admin', protect, authorize('admin'));
+ *   router.use('/trainer', protect, authorize('trainer', 'admin'));
+ *   router.use('/member', protect, authorize('member', 'trainer', 'admin'));
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Not authenticated.' });
+      return res.status(401).json({
+        success: false,
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required.'
+      });
     }
 
     if (!roles.includes(req.user.role)) {

@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'fallback_access_secret_12345';
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret_67890';
@@ -13,10 +14,10 @@ export const generateAccessToken = (payload) => {
 };
 
 /**
- * Generates a Refresh Token for a given user payload.
+ * Generates a Refresh Token for a given user payload with optional token ID (jti).
  */
-export const generateRefreshToken = (payload) => {
-  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES });
+export const generateRefreshToken = (payload, refreshTokenId = crypto.randomUUID()) => {
+  return jwt.sign({ ...payload, jti: refreshTokenId }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES });
 };
 
 /**
@@ -34,7 +35,7 @@ export const verifyRefreshToken = (token) => {
 };
 
 /**
- * Sets Refresh Token httpOnly secure cookie on HTTP response object.
+ * Sets Refresh Token in an HttpOnly, Secure, SameSite Cookie.
  */
 export const sendRefreshTokenCookie = (res, token) => {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -47,12 +48,13 @@ export const sendRefreshTokenCookie = (res, token) => {
 };
 
 /**
- * Clears Refresh Token httpOnly cookie.
+ * Clears Refresh Token HttpOnly cookie.
  */
 export const clearRefreshTokenCookie = (res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
   res.clearCookie('refreshToken', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax'
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax'
   });
 };
