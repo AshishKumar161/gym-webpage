@@ -40,6 +40,30 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// Welcome / Root Endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: '🏋️ Welcome to the Gym Management API',
+    version: '1.0.0',
+    status: 'ONLINE',
+    endpoints: {
+      health: '/health',
+      auth: {
+        register: 'POST /api/v1/auth/register',
+        login: 'POST /api/v1/auth/login',
+        me: 'GET /api/v1/auth/me',
+        logout: 'POST /api/v1/auth/logout'
+      },
+      protected: {
+        admin: '/admin/*',
+        trainer: '/trainer/*',
+        member: '/member/*'
+      }
+    }
+  });
+});
+
 // Health Check Endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
