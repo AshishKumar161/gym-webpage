@@ -2,13 +2,12 @@ import express from 'express';
 import { protect, authorize } from '../../../middlewares/authMiddleware.js';
 
 /**
- * Trainer Routes — All routes require authentication + trainer or admin role.
- * Backend enforces authorization. Frontend cannot bypass these checks.
+ * Trainer Routes — Only Trainer or Admin can access /trainer/*.
+ * Member and Guest access is rejected by backend RBAC.
  */
 const router = express.Router();
 
-// Apply protect + authorize to all routes in this namespace
-router.use(protect, authorize('trainer', 'admin'));
+router.use(protect, authorize('TRAINER', 'ADMIN', 'trainer', 'admin'));
 
 // ─── Trainer Dashboard Overview ───────────────────────────────────────────────
 router.get('/dashboard', (req, res) => {
@@ -16,7 +15,7 @@ router.get('/dashboard', (req, res) => {
     success: true,
     message: 'Trainer dashboard access granted.',
     trainer: {
-      id: req.user._id,
+      id: req.user.id || req.user._id,
       name: req.user.name,
       email: req.user.email,
       role: req.user.role

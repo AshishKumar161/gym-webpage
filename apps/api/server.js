@@ -4,18 +4,23 @@ import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 
 import connectDB from './src/config/db.js';
+import { connectPrisma } from './src/config/prisma.js';
 import logger from './src/utils/logger.js';
 import { configureSecurityMiddlewares } from './src/middlewares/securityMiddleware.js';
 import { globalLimiter } from './src/middlewares/rateLimiter.js';
 import { notFound, errorHandler } from './src/middlewares/errorMiddleware.js';
 import apiV1Routes from './src/routes/api/v1/index.js';
 import authRoutes from './src/routes/api/v1/authRoutes.js';
+import adminRoutes from './src/routes/api/v1/adminRoutes.js';
+import trainerRoutes from './src/routes/api/v1/trainerRoutes.js';
+import memberRoutes from './src/routes/api/v1/memberRoutes.js';
 
 // Load environment variables
 dotenv.config();
 
-// Connect to MongoDB (non-blocking connection attempt in dev/test)
+// Connect to Databases
 connectDB();
+connectPrisma();
 
 const app = express();
 
@@ -44,9 +49,13 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Direct Auth routes mounting for spec compliance (/auth/* and /api/auth/*)
+// Direct Auth & Role-Based Routes Mounting for spec compliance (/auth/*, /admin/*, /trainer/*, /member/*)
 app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
+
+app.use('/admin', adminRoutes);
+app.use('/trainer', trainerRoutes);
+app.use('/member', memberRoutes);
 
 // API Routes (Version 1)
 app.use('/api/v1', apiV1Routes);

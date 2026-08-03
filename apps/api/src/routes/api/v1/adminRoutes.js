@@ -4,7 +4,8 @@ import { protect, authorize } from '../../../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-router.use(protect, authorize('admin'));
+// Only ADMIN can access /admin/*
+router.use(protect, authorize('ADMIN', 'admin'));
 
 router.get('/analytics', getAdminAnalytics);
 router.get('/users', getUsers);

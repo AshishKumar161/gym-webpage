@@ -2,13 +2,12 @@ import express from 'express';
 import { protect, authorize } from '../../../middlewares/authMiddleware.js';
 
 /**
- * Member Routes — All routes require authentication + member, trainer, or admin role.
- * Backend enforces authorization. Frontend cannot bypass these checks.
+ * Member Routes — Member, Trainer, or Admin can access /member/*.
+ * Guest access is rejected by backend RBAC.
  */
 const router = express.Router();
 
-// Apply protect + authorize to all routes in this namespace
-router.use(protect, authorize('member', 'trainer', 'admin'));
+router.use(protect, authorize('MEMBER', 'TRAINER', 'ADMIN', 'member', 'trainer', 'admin'));
 
 // ─── Member Dashboard Overview ────────────────────────────────────────────────
 router.get('/dashboard', (req, res) => {
@@ -16,7 +15,7 @@ router.get('/dashboard', (req, res) => {
     success: true,
     message: 'Member dashboard access granted.',
     member: {
-      id: req.user._id,
+      id: req.user.id || req.user._id,
       name: req.user.name,
       email: req.user.email,
       role: req.user.role
@@ -29,13 +28,13 @@ router.get('/profile', (req, res) => {
   res.status(200).json({
     success: true,
     user: {
-      id: req.user._id,
+      id: req.user.id || req.user._id,
       name: req.user.name,
       email: req.user.email,
       phone: req.user.phone,
       avatar: req.user.avatar,
       role: req.user.role,
-      isVerified: req.user.isVerified,
+      emailVerified: req.user.emailVerified,
       lastLogin: req.user.lastLogin
     }
   });

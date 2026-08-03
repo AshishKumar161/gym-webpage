@@ -1,0 +1,249 @@
+// Prisma Schema for Neon PostgreSQL
+// Provider: PostgreSQL (Neon)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MEMBER
+  TRAINER
+  ADMIN
+}
+
+model User {
+  id                  String     @id @default(uuid())
+  name                String
+  email               String     @unique
+  password            String
+  phone               String?    @default("")
+  avatar              String?    @default("")
+  role                Role       @default(MEMBER)
+  emailVerified       Boolean    @default(false)
+  otpCode             String?
+  otpExpires          DateTime?
+  resetPasswordToken  String?
+  resetPasswordExpires DateTime?
+  failedLoginAttempts Int        @default(0)
+  accountLockedUntil  DateTime?
+  lastLogin           DateTime?
+  lastLoginIp         String?    @default("")
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  // Relations
+  sessions             Session[]
+  trainerProfile       Trainer?
+  subscriptions        Subscription[]
+  attendances          Attendance[]
+  memberWorkoutPlans   WorkoutPlan[]  @relation("MemberWorkoutPlans")
+  trainerWorkoutPlans  WorkoutPlan[]  @relation("TrainerWorkoutPlans")
+  memberDietPlans      DietPlan[]     @relation("MemberDietPlans")
+  trainerDietPlans     DietPlan[]     @relation("TrainerDietPlans")
+  payments             Payment[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@map("users")
+}
+
+model Trainer {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization  String?  @default("")
+  experienceYears Int?     @default(0)
+  bio             String?  @default("")
+  rating          Float?   @default(5.0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("trainers")
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenId   String   @unique
+  refreshTokenHash String
+  device           String   @default("Unknown Device")
+  browser          String   @default("Unknown Browser")
+  os               String   @default("Unknown OS")
+  ipAddress        String   @default("")
+  userAgent        String   @default("")
+  loginTime        DateTime @default(now())
+  lastActivity     DateTime @default(now())
+  expiresAt        DateTime
+  isRevoked        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId, isRevoked])
+  @@map("sessions")
+}
+
+model Membership {
+  id             String         @id @default(uuid())
+  title          String         @unique
+  slug           String
+  price          Float
+  durationMonths Int
+  features       String[]
+  isPopular      Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  subscriptions  Subscription[]
+
+  @@map("memberships")
+}
+
+model Subscription {
+  id               String     @id @default(uuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  membershipId     String
+  membership       Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  startDate        DateTime   @default(now())
+  endDate          DateTime
+  status           String     @default("active")
+  paymentReference String?    @default("")
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+model Attendance {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         DateTime @default(now())
+  checkInTime  String
+  checkOutTime String?  @default("")
+  method       String   @default("QR_CODE")
+  status       String   @default("present")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, date])
+  @@map("attendances")
+}
+
+model WorkoutPlan {
+  id          String     @id @default(uuid())
+  title       String
+  memberId    String
+  member      User       @relation("MemberWorkoutPlans", fields: [memberId], references: [id], onDelete: Cascade)
+  trainerId   String
+  trainer     User       @relation("TrainerWorkoutPlans", fields: [trainerId], references: [id], onDelete: Cascade)
+  dayOfWeek   String     @default("Monday")
+  notes       String?    @default("")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  exercises   Exercise[]
+
+  @@index([memberId])
+  @@index([trainerId])
+  @@map("workout_plans")
+}
+
+model Exercise {
+  id            String      @id @default(uuid())
+  workoutPlanId String
+  workoutPlan   WorkoutPlan @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
+  name          String
+  sets          Int
+  reps          String
+  targetMuscle  String?     @default("")
+  videoUrl      String?     @default("")
+
+  @@map("exercises")
+}
+
+model DietPlan {
+  id                  String   @id @default(uuid())
+  title               String
+  memberId            String
+  member              User     @relation("MemberDietPlans", fields: [memberId], references: [id], onDelete: Cascade)
+  trainerId           String
+  trainer             User     @relation("TrainerDietPlans", fields: [trainerId], references: [id], onDelete: Cascade)
+  dailyCaloriesTarget Int
+  waterIntakeLiters   Float    @default(3.0)
+  instructions        String?  @default("")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  meals               Meal[]
+
+  @@index([memberId])
+  @@index([trainerId])
+  @@map("diet_plans")
+}
+
+model Meal {
+  id         String   @id @default(uuid())
+  dietPlanId String
+  dietPlan   DietPlan @relation(fields: [dietPlanId], references: [id], onDelete: Cascade)
+  mealType   String
+  foodItems  String
+  calories   Int      @default(0)
+  protein    Int      @default(0)
+  carbs      Int      @default(0)
+  fats       Int      @default(0)
+
+  @@map("meals")
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  invoiceNumber String   @unique
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planName      String
+  amount        Float
+  paymentMethod String   @default("UPI")
+  status        String   @default("paid")
+  paidAt        DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, status])
+  @@map("payments")
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  recipientId String
+  recipient   User     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        String   @default("info")
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([recipientId, isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     String
+  ipAddress String   @default("")
+  userAgent String   @default("")
+  details   String   @default("")
+  timestamp DateTime @default(now())
+
+  @@map("audit_logs")
+}

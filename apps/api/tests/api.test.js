@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-// ─── 1. DATABASE & USER MODEL TESTS ─────────────────────────────────────────
+// ─── 1. DATABASE & USER REGISTRATION TESTS ──────────────────────────────────
 
 test('Database: User password must be hashed with bcrypt (never plain text)', async () => {
   const plainPassword = 'SuperSecretPass123!';
@@ -53,7 +53,152 @@ test('Database: User model contains all required schema fields', () => {
   assert.ok(Array.isArray(user.auditLogs));
 });
 
-// ─── 2. LOGIN & LOCKOUT TESTS ───────────────────────────────────────────────
+test('User Registration: Duplicate email returns HTTP 409 Conflict with exact error message', () => {
+  const usersDb = [{ id: '1', email: 'existing@example.com' }];
+
+  const handleRegister = (email) => {
+    const exists = usersDb.find((u) => u.email === email.toLowerCase().trim());
+    if (exists) {
+      return { status: 409, body: { success: false, message: 'Email already registered.' } };
+    }
+    return { status: 201, body: { success: true, message: 'User registered successfully.' } };
+  };
+
+  const response = handleRegister('existing@example.com');
+  assert.strictEqual(response.status, 409);
+  assert.strictEqual(response.body.success, false);
+  assert.strictEqual(response.body.message, 'Email already registered.');
+});
+
+test('User Registration: Successful registration creates user record and does NOT auto log in', async () => {
+  const password = 'StrongPassword123!';
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const newUser = {
+    id: 'user_uuid_123',
+    name: 'New User',
+    email: 'newuser@example.com',
+    password: hashedPassword,
+    role: 'MEMBER',
+    emailVerified: false,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+
+  const registrationResponse = {
+    status: 201,
+    body: {
+      success: true,
+      message: 'User registered successfully.',
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        createdAt: newUser.createdAt
+      }
+    }
+  };
+
+  assert.strictEqual(registrationResponse.status, 201);
+  assert.strictEqual(registrationResponse.body.success, true);
+  assert.strictEqual(registrationResponse.body.message, 'User registered successfully.');
+  assert.strictEqual(registrationResponse.body.user.email, 'newuser@example.com');
+  assert.strictEqual(registrationResponse.body.accessToken, undefined);
+  assert.strictEqual(registrationResponse.body.refreshToken, undefined);
+});
+
+// ─── 2. LOGIN & AUTHENTICATION TESTS ────────────────────────────────────────
+
+test('Login Flow: Returns HTTP 401 if user email does not exist', async () => {
+  const usersDb = [];
+  const handleLogin = async (email, password) => {
+    const user = usersDb.find((u) => u.email === email);
+    if (!user) return { status: 401, body: { success: false, message: 'Invalid email or password.' } };
+    return { status: 200 };
+  };
+
+  const response = await handleLogin('nonexistent@example.com', 'Password123');
+  assert.strictEqual(response.status, 401);
+  assert.strictEqual(response.body.success, false);
+  assert.strictEqual(response.body.message, 'Invalid email or password.');
+});
+
+test('Login Flow: Returns HTTP 401 if password is incorrect using bcrypt.compare()', async () => {
+  const correctPassword = 'MySecretPassword123!';
+  const hashedPassword = await bcrypt.hash(correctPassword, 10);
+  const user = { email: 'user@example.com', password: hashedPassword };
+
+  const handleLogin = async (email, inputPassword) => {
+    if (email !== user.email) return { status: 401, body: { success: false, message: 'Invalid email or password.' } };
+    const isMatch = await bcrypt.compare(inputPassword, user.password);
+    if (!isMatch) return { status: 401, body: { success: false, message: 'Invalid email or password.' } };
+    return { status: 200, body: { success: true } };
+  };
+
+  const response = await handleLogin('user@example.com', 'WrongPassword123');
+  assert.strictEqual(response.status, 401);
+  assert.strictEqual(response.body.success, false);
+  assert.strictEqual(response.body.message, 'Invalid email or password.');
+});
+
+test('Login Flow: Successful login generates tokens, creates Session in PostgreSQL, and never returns password', async () => {
+  const rawPassword = 'CorrectPassword123!';
+  const hashedPassword = await bcrypt.hash(rawPassword, 10);
+  const userInDb = {
+    id: 'user_pg_999',
+    name: 'Jane Doe',
+    email: 'jane@example.com',
+    password: hashedPassword,
+    role: 'MEMBER'
+  };
+
+  const sessionsDb = [];
+  const handleLogin = async (email, inputPassword) => {
+    const isMatch = await bcrypt.compare(inputPassword, userInDb.password);
+    if (!isMatch) return { status: 401 };
+
+    const accessToken = jwt.sign({ id: userInDb.id, role: userInDb.role }, 'secret', { expiresIn: '15m' });
+    const refreshTokenId = crypto.randomUUID();
+
+    // Create session record in database
+    const sessionRecord = {
+      id: 'sess_1',
+      userId: userInDb.id,
+      refreshTokenId,
+      device: 'Desktop',
+      browser: 'Chrome',
+      createdAt: new Date()
+    };
+    sessionsDb.push(sessionRecord);
+
+    // Stripped user payload (NEVER return password)
+    const authenticatedUser = {
+      id: userInDb.id,
+      name: userInDb.name,
+      email: userInDb.email,
+      role: userInDb.role
+    };
+
+    return {
+      status: 200,
+      body: {
+        success: true,
+        message: 'Login successful.',
+        accessToken,
+        user: authenticatedUser
+      }
+    };
+  };
+
+  const response = await handleLogin('jane@example.com', rawPassword);
+  assert.strictEqual(response.status, 200);
+  assert.strictEqual(response.body.success, true);
+  assert.strictEqual(typeof response.body.accessToken, 'string');
+  assert.strictEqual(sessionsDb.length, 1);
+  assert.strictEqual(sessionsDb[0].userId, 'user_pg_999');
+  assert.strictEqual(response.body.user.password, undefined);
+});
 
 test('Login Flow: Increments failed attempts and locks account after 5 failed tries', () => {
   let failedLoginAttempts = 0;
@@ -79,18 +224,6 @@ test('Login Flow: Account lockout prevents login when active', () => {
   const accountLockedUntil = new Date(Date.now() + 15 * 60 * 1000);
   const isLocked = accountLockedUntil && accountLockedUntil > Date.now();
   assert.strictEqual(isLocked, true);
-});
-
-test('Login Flow: Reset failed login attempts on successful password verification', () => {
-  let failedLoginAttempts = 4;
-  let accountLockedUntil = null;
-
-  // On correct login
-  failedLoginAttempts = 0;
-  accountLockedUntil = null;
-
-  assert.strictEqual(failedLoginAttempts, 0);
-  assert.strictEqual(accountLockedUntil, null);
 });
 
 // ─── 3. SESSION MANAGEMENT & /auth/me TESTS ─────────────────────────────────

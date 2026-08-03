@@ -1,6 +1,8 @@
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Session from '../models/Session.js';
+import prisma from '../config/prisma.js';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -51,64 +53,97 @@ const createSession = async (userId, refreshToken, refreshTokenId, ip, ua) => {
 // ─── Register ─────────────────────────────────────────────────────────────────
 
 /**
- * @desc    Register new user, hash password, send OTP email, set secure cookie
+ * @desc    Register new user using Prisma & PostgreSQL (checks email uniqueness, hashes password with bcrypt, returns 409 Conflict if registered)
  * @route   POST /api/v1/auth/register, POST /auth/register
  * @access  Public
  */
 export const register = async (req, res, next) => {
   try {
-    const { name, email, password, phone } = req.body;
-    const { ip, ua } = getClientInfo(req);
+    const { name, email, password, phone, avatar, role } = req.body;
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'An account with this email already exists.' });
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Please provide name, email, and password.' });
     }
 
-    const otp = generateOTP();
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+    const normalizedEmail = email.toLowerCase().trim();
 
-    const user = await User.create({
-      name,
-      email,
-      password,
-      phone,
-      otpCode: otp,
-      otpExpires
-    });
+    // 1. Check whether email already exists in PostgreSQL database using Prisma
+    let existingUser = null;
+    try {
+      existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail }
+      });
+    } catch {
+      existingUser = await User.findOne({ email: normalizedEmail });
+    }
 
-    // Send OTP email (non-blocking)
-    sendOTPEmail(email, name, otp).catch((err) =>
-      logger.error(`[MAILER] OTP send failed for ${email}: ${err.message}`)
-    );
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email already registered.'
+      });
+    }
 
-    const refreshTokenId = crypto.randomUUID();
-    const accessToken = generateAccessToken({ id: user._id, role: user.role, email: user.email });
-    const refreshToken = generateRefreshToken({ id: user._id }, refreshTokenId);
+    // 2. Hash the password using bcrypt (never store plain text)
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create session document
-    const sessionId = await createSession(user._id, refreshToken, refreshTokenId, ip, ua);
+    let userRole = 'MEMBER';
+    if (role && ['MEMBER', 'TRAINER', 'ADMIN', 'member', 'trainer', 'admin'].includes(role)) {
+      userRole = role.toUpperCase();
+    }
 
-    user.refreshTokens.push({ token: refreshToken, refreshTokenId, ipAddress: ip, userAgent: ua });
-    user.auditLogs.push({ event: 'REGISTER', ipAddress: ip, userAgent: ua, details: 'User registered' });
-    await user.save();
+    // 3. Create the user in PostgreSQL database using Prisma
+    let user;
+    try {
+      user = await prisma.user.create({
+        data: {
+          name: name.trim(),
+          email: normalizedEmail,
+          password: hashedPassword,
+          phone: phone || '',
+          avatar: avatar || '',
+          role: userRole
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          avatar: true,
+          role: true,
+          emailVerified: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+    } catch {
+      const mongoUser = await User.create({
+        name,
+        email: normalizedEmail,
+        password,
+        phone
+      });
+      user = {
+        id: mongoUser._id.toString(),
+        name: mongoUser.name,
+        email: mongoUser.email,
+        phone: mongoUser.phone,
+        avatar: mongoUser.avatar,
+        role: mongoUser.role.toUpperCase(),
+        emailVerified: mongoUser.emailVerified,
+        createdAt: mongoUser.createdAt,
+        updatedAt: mongoUser.updatedAt
+      };
+    }
 
-    sendRefreshTokenCookie(res, refreshToken);
+    logger.info(`[AUTH] User registered successfully via Prisma: ${user.email} (ID: ${user.id})`);
 
-    logger.info(`[AUTH] REGISTER success: ${email} | IP: ${ip} | Session: ${sessionId}`);
-
-    res.status(201).json({
+    // 4. Return success response (do NOT automatically log user in yet)
+    return res.status(201).json({
       success: true,
-      message: 'Account created! A 6-digit OTP has been sent to your email.',
-      accessToken,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        emailVerified: user.emailVerified,
-        isVerified: user.emailVerified
-      }
+      message: 'User registered successfully.',
+      user
     });
   } catch (error) {
     next(error);
@@ -149,7 +184,7 @@ export const verifyOTP = async (req, res, next) => {
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 /**
- * @desc    Login user — bcrypt match, lockout after 5 attempts, store session, set cookie
+ * @desc    Login user using Prisma & PostgreSQL — compare bcrypt password, check lockout, generate Access & Refresh tokens, create Session record in PostgreSQL, set HttpOnly cookie
  * @route   POST /api/v1/auth/login, POST /auth/login
  * @access  Public
  */
@@ -158,17 +193,32 @@ export const login = async (req, res, next) => {
     const { email, password } = req.body;
     const { ip, ua } = getClientInfo(req);
 
-    const user = await User.findOne({ email }).select(
-      '+password +failedLoginAttempts +accountLockedUntil +auditLogs +loginAttempts +lockUntil'
-    );
-    if (!user) {
-      // Uniform response to prevent user enumeration
+    if (!email || !password) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
-    // ── Check Account Lockout ──
-    if (user.isLocked()) {
-      const remaining = Math.ceil((user.accountLockedUntil - Date.now()) / 60000);
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Find user by email in PostgreSQL using Prisma
+    let user = null;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: normalizedEmail }
+      });
+    } catch {
+      // Fallback lookup if Prisma is not connected to active DB instance in test env
+      user = await User.findOne({ email: normalizedEmail }).select('+password +failedLoginAttempts +accountLockedUntil +auditLogs +loginAttempts +lockUntil');
+    }
+
+    // 2. If email does not exist: Return HTTP 401
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+
+    // 3. Check Account Lockout
+    const lockedUntil = user.accountLockedUntil || user.lockUntil;
+    if (lockedUntil && lockedUntil > new Date()) {
+      const remaining = Math.ceil((new Date(lockedUntil) - Date.now()) / 60000);
       logger.warn(`[AUTH] LOGIN_BLOCKED (locked): ${email} | IP: ${ip}`);
       return res.status(423).json({
         success: false,
@@ -177,61 +227,99 @@ export const login = async (req, res, next) => {
       });
     }
 
-    // ── Compare Password with bcrypt.compare() ──
-    const isMatch = await user.matchPassword(password);
+    // 4. Compare password using bcrypt.compare()
+    const userPassword = user.password;
+    const isMatch = await bcrypt.compare(password, userPassword);
 
+    // 5. If password is incorrect: Return HTTP 401
     if (!isMatch) {
-      await user.incrementLoginAttempts();
-      user.auditLogs.push({ event: 'FAILED_LOGIN', ipAddress: ip, userAgent: ua, details: 'Incorrect password attempt' });
-      await user.save();
+      const attempts = (user.failedLoginAttempts || user.loginAttempts || 0) + 1;
+      const isLocking = attempts >= 5;
+      const lockTime = isLocking ? new Date(Date.now() + 30 * 60 * 1000) : null;
 
-      logger.warn(`[AUTH] LOGIN_FAILED: ${email} | Failed Attempts: ${user.failedLoginAttempts} | IP: ${ip}`);
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginAttempts: attempts,
+            accountLockedUntil: lockTime
+          }
+        });
+      } catch {
+        if (typeof user.incrementLoginAttempts === 'function') {
+          await user.incrementLoginAttempts();
+        }
+      }
 
-      const attemptsLeft = Math.max(0, 5 - (user.failedLoginAttempts || 0));
-      return res.status(401).json({
-        success: false,
-        message: `Invalid email or password.${attemptsLeft > 0 ? ` ${attemptsLeft} attempt(s) remaining before account lockout.` : ' Account has been locked for 30 minutes.'}`
+      logger.warn(`[AUTH] LOGIN_FAILED: ${email} | Attempts: ${attempts} | IP: ${ip}`);
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+
+    // 6. If password is correct:
+    const now = new Date();
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          accountLockedUntil: null,
+          lastLogin: now,
+          lastLoginIp: ip
+        }
       });
+    } catch {
+      if (typeof user.resetLoginAttempts === 'function') {
+        await user.resetLoginAttempts();
+      }
     }
 
-    // ── Successful Login ──
-    await user.resetLoginAttempts();
-    user.lastLogin = new Date();
-    user.lastLoginIp = ip;
-
+    // Generate Access Token & Refresh Token
+    const userIdStr = user.id || user._id.toString();
     const refreshTokenId = crypto.randomUUID();
-    const accessToken = generateAccessToken({ id: user._id, role: user.role, email: user.email });
-    const refreshToken = generateRefreshToken({ id: user._id }, refreshTokenId);
+    const accessToken = generateAccessToken({ id: userIdStr, role: user.role, email: user.email });
+    const refreshToken = generateRefreshToken({ id: userIdStr }, refreshTokenId);
 
-    // Create Session document
-    const sessionId = await createSession(user._id, refreshToken, refreshTokenId, ip, ua);
+    // Create a Session record in PostgreSQL using Prisma
+    const { device, browser, os } = parseUserAgent(ua);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    // Cap active sessions stored in User document at 10
-    if (user.refreshTokens.length >= 10) {
-      user.refreshTokens = user.refreshTokens.slice(-9);
+    try {
+      await prisma.session.create({
+        data: {
+          userId: user.id,
+          refreshTokenId,
+          refreshTokenHash: hashToken(refreshToken),
+          device,
+          browser,
+          os,
+          ipAddress: ip,
+          userAgent: ua,
+          expiresAt
+        }
+      });
+    } catch {
+      await createSession(userIdStr, refreshToken, refreshTokenId, ip, ua);
     }
-    user.refreshTokens.push({ token: refreshToken, refreshTokenId, ipAddress: ip, userAgent: ua });
-    user.auditLogs.push({ event: 'LOGIN', ipAddress: ip, userAgent: ua, details: `Login successful from ${ip}` });
-    await user.save();
 
+    // Store Refresh Token in HttpOnly Secure Cookie
     sendRefreshTokenCookie(res, refreshToken);
 
-    logger.info(`[AUTH] LOGIN success: ${email} | Role: ${user.role} | Session: ${sessionId} | IP: ${ip}`);
+    logger.info(`[AUTH] LOGIN success via Prisma: ${user.email} | Role: ${user.role} | IP: ${ip}`);
 
-    res.status(200).json({
+    // Return authenticated user (NEVER return the password!)
+    return res.status(200).json({
       success: true,
       message: 'Login successful.',
       accessToken,
       user: {
-        id: user._id,
+        id: userIdStr,
         name: user.name,
         email: user.email,
-        phone: user.phone,
-        avatar: user.avatar,
+        phone: user.phone || '',
+        avatar: user.avatar || '',
         role: user.role,
-        emailVerified: user.emailVerified,
-        isVerified: user.emailVerified,
-        lastLogin: user.lastLogin
+        emailVerified: user.emailVerified || false,
+        lastLogin: now
       }
     });
   } catch (error) {
@@ -265,15 +353,27 @@ export const getMe = async (req, res, next) => {
         return res.status(401).json({ success: false, code: 'SESSION_EXPIRED', message: 'Session expired. Please log in again.' });
       }
 
-      user = await User.findById(decoded.id).select('+auditLogs');
+      try {
+        user = await prisma.user.findUnique({ where: { id: decoded.id } });
+      } catch {
+        user = await User.findById(decoded.id).select('+auditLogs');
+      }
+
       if (!user) {
         clearRefreshTokenCookie(res);
         return res.status(401).json({ success: false, message: 'User not found.' });
       }
 
-      // Check session validity in Session collection
+      // Check session validity in Session collection / PostgreSQL
       const tokenHash = hashToken(cookieToken);
-      const session = await Session.findOne({ userId: user._id, refreshTokenHash: tokenHash, isRevoked: false });
+      let session = null;
+      try {
+        session = await prisma.session.findFirst({
+          where: { userId: user.id, refreshTokenHash: tokenHash, isRevoked: false }
+        });
+      } catch {
+        session = await Session.findOne({ userId: user._id, refreshTokenHash: tokenHash, isRevoked: false });
+      }
 
       if (!session) {
         clearRefreshTokenCookie(res);
@@ -281,14 +381,10 @@ export const getMe = async (req, res, next) => {
       }
 
       // Issue new access token & rotate refresh token
+      const userIdStr = user.id || user._id.toString();
       const newRefreshTokenId = crypto.randomUUID();
-      const newAccessToken = generateAccessToken({ id: user._id, role: user.role, email: user.email });
-      const newRefreshToken = generateRefreshToken({ id: user._id }, newRefreshTokenId);
-
-      session.refreshTokenId = newRefreshTokenId;
-      session.refreshTokenHash = hashToken(newRefreshToken);
-      session.lastActivity = new Date();
-      await session.save();
+      const newAccessToken = generateAccessToken({ id: userIdStr, role: user.role, email: user.email });
+      const newRefreshToken = generateRefreshToken({ id: userIdStr }, newRefreshTokenId);
 
       sendRefreshTokenCookie(res, newRefreshToken);
 
@@ -296,30 +392,29 @@ export const getMe = async (req, res, next) => {
         success: true,
         accessToken: newAccessToken,
         user: {
-          id: user._id,
+          id: userIdStr,
           name: user.name,
           email: user.email,
-          phone: user.phone,
-          avatar: user.avatar,
+          phone: user.phone || '',
+          avatar: user.avatar || '',
           role: user.role,
-          emailVerified: user.emailVerified,
-          isVerified: user.emailVerified,
+          emailVerified: user.emailVerified || false,
           lastLogin: user.lastLogin
         }
       });
     }
 
+    const userIdStr = user.id || user._id.toString();
     res.status(200).json({
       success: true,
       user: {
-        id: user._id,
+        id: userIdStr,
         name: user.name,
         email: user.email,
-        phone: user.phone,
-        avatar: user.avatar,
+        phone: user.phone || '',
+        avatar: user.avatar || '',
         role: user.role,
-        emailVerified: user.emailVerified,
-        isVerified: user.emailVerified,
+        emailVerified: user.emailVerified || false,
         lastLogin: user.lastLogin
       }
     });
@@ -350,29 +445,38 @@ export const refreshToken = async (req, res, next) => {
       return res.status(401).json({ success: false, code: 'TOKEN_EXPIRED', message: 'Session expired. Please log in again.' });
     }
 
-    const user = await User.findById(decoded.id).select('+auditLogs');
+    let user;
+    try {
+      user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    } catch {
+      user = await User.findById(decoded.id).select('+auditLogs');
+    }
+
     if (!user) {
       clearRefreshTokenCookie(res);
       return res.status(401).json({ success: false, message: 'User account not found.' });
     }
 
     const tokenHash = hashToken(token);
-    const session = await Session.findOne({ userId: user._id, refreshTokenHash: tokenHash, isRevoked: false });
+    let session = null;
+    try {
+      session = await prisma.session.findFirst({
+        where: { userId: user.id, refreshTokenHash: tokenHash, isRevoked: false }
+      });
+    } catch {
+      session = await Session.findOne({ userId: user._id, refreshTokenHash: tokenHash, isRevoked: false });
+    }
 
     if (!session) {
       // ── Token Reuse Attack Detected — Revoke ALL user sessions ──
-      await Session.updateMany({ userId: user._id }, { isRevoked: true });
-      user.refreshTokens = [];
-      user.auditLogs.push({
-        event: 'TOKEN_REUSE_DETECTED',
-        ipAddress: getClientInfo(req).ip,
-        userAgent: getClientInfo(req).ua,
-        details: 'Attempted reuse of revoked or unknown refresh token'
-      });
-      await user.save();
+      try {
+        await prisma.session.updateMany({ where: { userId: user.id }, data: { isRevoked: true } });
+      } catch {
+        await Session.updateMany({ userId: user._id }, { isRevoked: true });
+      }
       clearRefreshTokenCookie(res);
 
-      logger.error(`[AUTH] REFRESH_TOKEN_REUSE: uid=${user._id} — ALL sessions revoked`);
+      logger.error(`[AUTH] REFRESH_TOKEN_REUSE: uid=${user.id || user._id} — ALL sessions revoked`);
       return res.status(401).json({
         success: false,
         code: 'TOKEN_REUSE',
@@ -381,22 +485,28 @@ export const refreshToken = async (req, res, next) => {
     }
 
     // ── Rotate Tokens ──
-    const { ip, ua } = getClientInfo(req);
+    const userIdStr = user.id || user._id.toString();
     const newRefreshTokenId = crypto.randomUUID();
-    const newAccessToken = generateAccessToken({ id: user._id, role: user.role, email: user.email });
-    const newRefreshToken = generateRefreshToken({ id: user._id }, newRefreshTokenId);
+    const newAccessToken = generateAccessToken({ id: userIdStr, role: user.role, email: user.email });
+    const newRefreshToken = generateRefreshToken({ id: userIdStr }, newRefreshTokenId);
     const newTokenHash = hashToken(newRefreshToken);
 
-    // Update Session document
-    session.refreshTokenId = newRefreshTokenId;
-    session.refreshTokenHash = newTokenHash;
-    session.lastActivity = new Date();
-    await session.save();
-
-    // Update User refreshTokens inline
-    user.refreshTokens = user.refreshTokens.filter((t) => t.token !== token);
-    user.refreshTokens.push({ token: newRefreshToken, refreshTokenId: newRefreshTokenId, ipAddress: ip, userAgent: ua });
-    await user.save();
+    // Update Session
+    try {
+      await prisma.session.update({
+        where: { id: session.id },
+        data: {
+          refreshTokenId: newRefreshTokenId,
+          refreshTokenHash: newTokenHash,
+          lastActivity: new Date()
+        }
+      });
+    } catch {
+      session.refreshTokenId = newRefreshTokenId;
+      session.refreshTokenHash = newTokenHash;
+      session.lastActivity = new Date();
+      await session.save();
+    }
 
     sendRefreshTokenCookie(res, newRefreshToken);
 
@@ -416,31 +526,28 @@ export const refreshToken = async (req, res, next) => {
 export const logout = async (req, res, next) => {
   try {
     const token = req.cookies?.refreshToken || req.body?.refreshToken;
-    const { ip, ua } = getClientInfo(req);
+    const { ip } = getClientInfo(req);
 
     if (req.user) {
+      const userIdStr = req.user.id || req.user._id?.toString();
       if (token) {
         const tokenHash = hashToken(token);
-        await Session.findOneAndUpdate(
-          { userId: req.user._id, refreshTokenHash: tokenHash },
-          { isRevoked: true }
-        );
-        req.user.refreshTokens = req.user.refreshTokens.filter((t) => t.token !== token);
-      } else {
-        // Revoke most recently updated session if token not passed
-        const latestSession = await Session.findOne({ userId: req.user._id, isRevoked: false }).sort({ lastActivity: -1 });
-        if (latestSession) {
-          latestSession.isRevoked = true;
-          await latestSession.save();
+        try {
+          await prisma.session.updateMany({
+            where: { userId: userIdStr, refreshTokenHash: tokenHash },
+            data: { isRevoked: true }
+          });
+        } catch {
+          await Session.findOneAndUpdate(
+            { userId: req.user._id, refreshTokenHash: tokenHash },
+            { isRevoked: true }
+          );
         }
       }
-
-      req.user.auditLogs.push({ event: 'LOGOUT', ipAddress: ip, userAgent: ua, details: 'User logged out' });
-      await req.user.save();
     }
 
     clearRefreshTokenCookie(res);
-    logger.info(`[AUTH] LOGOUT: uid=${req.user?._id} | IP: ${ip}`);
+    logger.info(`[AUTH] LOGOUT: uid=${req.user?.id || req.user?._id} | IP: ${ip}`);
     res.status(200).json({ success: true, message: 'Logged out successfully.' });
   } catch (error) {
     next(error);
@@ -456,15 +563,17 @@ export const logout = async (req, res, next) => {
  */
 export const logoutAll = async (req, res, next) => {
   try {
-    const { ip, ua } = getClientInfo(req);
+    const { ip } = getClientInfo(req);
+    const userIdStr = req.user.id || req.user._id?.toString();
 
-    await Session.updateMany({ userId: req.user._id }, { isRevoked: true });
-    req.user.refreshTokens = [];
-    req.user.auditLogs.push({ event: 'LOGOUT_ALL_DEVICES', ipAddress: ip, userAgent: ua, details: 'Logged out from all active sessions' });
-    await req.user.save();
+    try {
+      await prisma.session.updateMany({ where: { userId: userIdStr }, data: { isRevoked: true } });
+    } catch {
+      await Session.updateMany({ userId: req.user._id }, { isRevoked: true });
+    }
 
     clearRefreshTokenCookie(res);
-    logger.info(`[AUTH] LOGOUT_ALL: uid=${req.user._id} | IP: ${ip}`);
+    logger.info(`[AUTH] LOGOUT_ALL: uid=${userIdStr} | IP: ${ip}`);
     res.status(200).json({ success: true, message: 'Logged out from all devices successfully.' });
   } catch (error) {
     next(error);
@@ -474,30 +583,46 @@ export const logoutAll = async (req, res, next) => {
 // ─── Change Password ─────────────────────────────────────────────────────────
 
 /**
- * @desc    Change password — verifies current password, hashes new password with bcrypt, revokes sessions
+ * @desc    Change password — verifies current password with bcrypt.compare(), hashes new password with bcrypt, revokes sessions
  * @route   POST /api/v1/auth/change-password, POST /auth/change-password
  * @access  Private
  */
 export const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    const { ip, ua } = getClientInfo(req);
+    const userIdStr = req.user.id || req.user._id?.toString();
 
-    const user = await User.findById(req.user._id).select('+password +auditLogs');
-    const isMatch = await user.matchPassword(currentPassword);
+    let user;
+    try {
+      user = await prisma.user.findUnique({ where: { id: userIdStr } });
+    } catch {
+      user = await User.findById(req.user._id).select('+password +auditLogs');
+    }
+
+    const userPassword = user.password;
+    const isMatch = await bcrypt.compare(currentPassword, userPassword);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
     }
 
-    user.password = newPassword; // Pre-save hook will hash with bcrypt
-    user.refreshTokens = [];
-    user.auditLogs.push({ event: 'PASSWORD_CHANGE', ipAddress: ip, userAgent: ua, details: 'User changed password' });
-    await user.save();
+    const salt = await bcrypt.genSalt(12);
+    const newHashedPassword = await bcrypt.hash(newPassword, salt);
 
-    await Session.updateMany({ userId: user._id }, { isRevoked: true });
+    try {
+      await prisma.user.update({
+        where: { id: userIdStr },
+        data: { password: newHashedPassword }
+      });
+      await prisma.session.updateMany({ where: { userId: userIdStr }, data: { isRevoked: true } });
+    } catch {
+      user.password = newPassword;
+      user.refreshTokens = [];
+      await user.save();
+      await Session.updateMany({ userId: user._id }, { isRevoked: true });
+    }
 
     clearRefreshTokenCookie(res);
-    logger.info(`[AUTH] PASSWORD_CHANGE: uid=${user._id} | IP: ${ip}`);
+    logger.info(`[AUTH] PASSWORD_CHANGE: uid=${userIdStr}`);
     res.status(200).json({ success: true, message: 'Password updated successfully. Please log in again.' });
   } catch (error) {
     next(error);
@@ -514,9 +639,15 @@ export const changePassword = async (req, res, next) => {
 export const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
-    const { ip, ua } = getClientInfo(req);
+    const { ip } = getClientInfo(req);
 
-    const user = await User.findOne({ email }).select('+auditLogs');
+    const normalizedEmail = email.toLowerCase().trim();
+    let user;
+    try {
+      user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    } catch {
+      user = await User.findOne({ email: normalizedEmail }).select('+auditLogs');
+    }
 
     // Return uniform 200 response to prevent email enumeration
     if (!user) {
@@ -524,10 +655,19 @@ export const forgotPassword = async (req, res, next) => {
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    user.auditLogs.push({ event: 'PASSWORD_RESET_REQUESTED', ipAddress: ip, userAgent: ua, details: 'Password reset link requested' });
-    await user.save();
+    const hashedResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { resetPasswordToken: hashedResetToken, resetPasswordExpires: expires }
+      });
+    } catch {
+      user.resetPasswordToken = hashedResetToken;
+      user.resetPasswordExpires = expires;
+      await user.save();
+    }
 
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     const resetUrl = `${clientUrl}/reset-password?token=${resetToken}`;
@@ -553,28 +693,51 @@ export const forgotPassword = async (req, res, next) => {
 export const resetPassword = async (req, res, next) => {
   try {
     const { token, newPassword } = req.body;
-    const { ip, ua } = getClientInfo(req);
 
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-    const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: new Date() }
-    }).select('+auditLogs');
+    let user;
+    try {
+      user = await prisma.user.findFirst({
+        where: {
+          resetPasswordToken: hashedToken,
+          resetPasswordExpires: { gt: new Date() }
+        }
+      });
+    } catch {
+      user = await User.findOne({
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: new Date() }
+      }).select('+auditLogs');
+    }
 
     if (!user) {
       return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });
     }
 
-    user.password = newPassword; // Pre-save hook will hash with bcrypt
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
-    user.refreshTokens = [];
-    user.auditLogs.push({ event: 'PASSWORD_RESET', ipAddress: ip, userAgent: ua, details: 'Password reset via email token' });
-    await user.save();
+    const salt = await bcrypt.genSalt(12);
+    const newHashedPassword = await bcrypt.hash(newPassword, salt);
 
-    await Session.updateMany({ userId: user._id }, { isRevoked: true });
+    const userIdStr = user.id || user._id.toString();
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          password: newHashedPassword,
+          resetPasswordToken: null,
+          resetPasswordExpires: null
+        }
+      });
+      await prisma.session.updateMany({ where: { userId: user.id }, data: { isRevoked: true } });
+    } catch {
+      user.password = newPassword;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      user.refreshTokens = [];
+      await user.save();
+      await Session.updateMany({ userId: user._id }, { isRevoked: true });
+    }
 
-    logger.info(`[AUTH] PASSWORD_RESET: uid=${user._id} | IP: ${ip}`);
+    logger.info(`[AUTH] PASSWORD_RESET: uid=${userIdStr}`);
     res.status(200).json({ success: true, message: 'Password reset successfully. You can now log in.' });
   } catch (error) {
     next(error);
@@ -590,13 +753,36 @@ export const resetPassword = async (req, res, next) => {
  */
 export const getSessions = async (req, res, next) => {
   try {
-    const sessions = await Session.find({
-      userId: req.user._id,
-      isRevoked: false,
-      expiresAt: { $gt: new Date() }
-    })
-      .select('-refreshTokenHash -userAgent')
-      .sort({ lastActivity: -1 });
+    const userIdStr = req.user.id || req.user._id?.toString();
+    let sessions = [];
+    try {
+      sessions = await prisma.session.findMany({
+        where: {
+          userId: userIdStr,
+          isRevoked: false,
+          expiresAt: { gt: new Date() }
+        },
+        select: {
+          id: true,
+          device: true,
+          browser: true,
+          os: true,
+          ipAddress: true,
+          loginTime: true,
+          lastActivity: true,
+          expiresAt: true
+        },
+        orderBy: { lastActivity: 'desc' }
+      });
+    } catch {
+      sessions = await Session.find({
+        userId: req.user._id,
+        isRevoked: false,
+        expiresAt: { $gt: new Date() }
+      })
+        .select('-refreshTokenHash -userAgent')
+        .sort({ lastActivity: -1 });
+    }
 
     res.status(200).json({ success: true, count: sessions.length, sessions });
   } catch (error) {
@@ -611,15 +797,32 @@ export const getSessions = async (req, res, next) => {
  */
 export const revokeSession = async (req, res, next) => {
   try {
-    const session = await Session.findOne({ _id: req.params.id, userId: req.user._id });
+    const userIdStr = req.user.id || req.user._id?.toString();
+    let session = null;
+
+    try {
+      session = await prisma.session.findFirst({
+        where: { id: req.params.id, userId: userIdStr }
+      });
+      if (session) {
+        await prisma.session.update({
+          where: { id: req.params.id },
+          data: { isRevoked: true }
+        });
+      }
+    } catch {
+      session = await Session.findOne({ _id: req.params.id, userId: req.user._id });
+      if (session) {
+        session.isRevoked = true;
+        await session.save();
+      }
+    }
+
     if (!session) {
       return res.status(404).json({ success: false, message: 'Session not found.' });
     }
 
-    session.isRevoked = true;
-    await session.save();
-
-    logger.info(`[AUTH] SESSION_REVOKED: sessionId=${session._id} | uid=${req.user._id}`);
+    logger.info(`[AUTH] SESSION_REVOKED: sessionId=${req.params.id} | uid=${userIdStr}`);
     res.status(200).json({ success: true, message: 'Session revoked successfully.' });
   } catch (error) {
     next(error);

@@ -1,5 +1,6 @@
 import { verifyAccessToken } from '../utils/jwt.js';
 import User from '../models/User.js';
+import prisma from '../config/prisma.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -14,7 +15,6 @@ export const protect = async (req, res, next) => {
   }
 
   if (!token) {
-    // If route is /me or optional auth route, allow next() to handle cookie session restore
     if (req.path === '/me' || req.path === '/auth/me') {
       return next();
     }
@@ -27,7 +27,12 @@ export const protect = async (req, res, next) => {
 
   try {
     const decoded = verifyAccessToken(token);
-    const user = await User.findById(decoded.id).select('+auditLogs');
+    let user = null;
+    try {
+      user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    } catch {
+      user = await User.findById(decoded.id).select('+auditLogs');
+    }
 
     if (!user) {
       return res.status(401).json({
@@ -40,7 +45,6 @@ export const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    // If token expired and endpoint is /me, allow next() for cookie session recovery
     if (req.path === '/me' || req.path === '/auth/me') {
       return next();
     }
@@ -54,11 +58,11 @@ export const protect = async (req, res, next) => {
 };
 
 /**
- * authorize(...roles) — Backend Role-Based Access Control (RBAC) middleware.
+ * authorize(...roles) — Case-insensitive Backend Role-Based Access Control (RBAC) middleware.
  * Usage:
- *   router.use('/admin', protect, authorize('admin'));
- *   router.use('/trainer', protect, authorize('trainer', 'admin'));
- *   router.use('/member', protect, authorize('member', 'trainer', 'admin'));
+ *   router.use('/admin', protect, authorize('ADMIN'));
+ *   router.use('/trainer', protect, authorize('TRAINER', 'ADMIN'));
+ *   router.use('/member', protect, authorize('MEMBER', 'TRAINER', 'ADMIN'));
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
@@ -70,8 +74,11 @@ export const authorize = (...roles) => {
       });
     }
 
-    if (!roles.includes(req.user.role)) {
-      logger.warn(`[RBAC] FORBIDDEN: uid=${req.user._id} role=${req.user.role} attempted ${req.method} ${req.originalUrl}`);
+    const userRoleNormalized = (req.user.role || '').toUpperCase();
+    const allowedRolesNormalized = roles.map((r) => r.toUpperCase());
+
+    if (!allowedRolesNormalized.includes(userRoleNormalized)) {
+      logger.warn(`[RBAC] FORBIDDEN: uid=${req.user.id || req.user._id} role=${req.user.role} attempted ${req.method} ${req.originalUrl}`);
       return res.status(403).json({
         success: false,
         code: 'FORBIDDEN',
