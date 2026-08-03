@@ -80,7 +80,9 @@ export const register = async (req, res, next) => {
     if (existingUser) {
       return res.status(409).json({
         success: false,
-        message: 'Email already registered.'
+        message: 'Email is already registered.',
+        data: null,
+        timestamp: new Date().toISOString()
       });
     }
 
@@ -143,7 +145,9 @@ export const register = async (req, res, next) => {
     return res.status(201).json({
       success: true,
       message: 'User registered successfully.',
-      user
+      data: { user },
+      user,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     next(error);

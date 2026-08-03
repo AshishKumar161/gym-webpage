@@ -59,7 +59,7 @@ test('User Registration: Duplicate email returns HTTP 409 Conflict with exact er
   const handleRegister = (email) => {
     const exists = usersDb.find((u) => u.email === email.toLowerCase().trim());
     if (exists) {
-      return { status: 409, body: { success: false, message: 'Email already registered.' } };
+      return { status: 409, body: { success: false, message: 'Email is already registered.' } };
     }
     return { status: 201, body: { success: true, message: 'User registered successfully.' } };
   };
@@ -67,7 +67,7 @@ test('User Registration: Duplicate email returns HTTP 409 Conflict with exact er
   const response = handleRegister('existing@example.com');
   assert.strictEqual(response.status, 409);
   assert.strictEqual(response.body.success, false);
-  assert.strictEqual(response.body.message, 'Email already registered.');
+  assert.strictEqual(response.body.message, 'Email is already registered.');
 });
 
 test('User Registration: Successful registration creates user record and does NOT auto log in', async () => {
