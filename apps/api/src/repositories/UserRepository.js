@@ -2,15 +2,32 @@ import prisma from '../config/prisma.js';
 
 export class UserRepository {
   static async findByEmail(email) {
+    if (!email) return null;
     const normalizedEmail = email.toLowerCase().trim();
-    return await prisma.user.findUnique({
-      where: { email: normalizedEmail }
+    return await prisma.user.findFirst({
+      where: { email: normalizedEmail, isDeleted: false }
     });
   }
 
   static async findById(id) {
-    return await prisma.user.findUnique({
-      where: { id }
+    if (!id) return null;
+    return await prisma.user.findFirst({
+      where: { id, isDeleted: false },
+      select: {
+        id: true, name: true, email: true, phone: true, avatar: true,
+        role: true, emailVerified: true, lastLogin: true, createdAt: true, updatedAt: true
+      }
+    });
+  }
+
+  static async findByResetToken(tokenHash) {
+    if (!tokenHash) return null;
+    return await prisma.user.findFirst({
+      where: {
+        resetPasswordToken: tokenHash,
+        resetPasswordExpires: { gt: new Date() },
+        isDeleted: false
+      }
     });
   }
 
@@ -34,12 +51,20 @@ export class UserRepository {
   static async update(id, updateData) {
     return await prisma.user.update({
       where: { id },
-      data: updateData
+      data: updateData,
+      select: {
+        id: true, name: true, email: true, phone: true, avatar: true,
+        role: true, emailVerified: true, lastLogin: true, createdAt: true, updatedAt: true
+      }
     });
   }
 
   static async list({ skip = 0, take = 10, role = null }) {
-    const where = role ? { role: role.toUpperCase() } : {};
+    const where = { isDeleted: false };
+    if (role) {
+      where.role = role.toUpperCase();
+    }
+
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
@@ -63,6 +88,6 @@ export class UserRepository {
   }
 
   static async count() {
-    return await prisma.user.count();
+    return await prisma.user.count({ where: { isDeleted: false } });
   }
 }

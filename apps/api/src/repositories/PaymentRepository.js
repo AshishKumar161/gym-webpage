@@ -1,17 +1,24 @@
 import prisma from '../config/prisma.js';
 
 export class PaymentRepository {
+  static formatPayment(p) {
+    if (!p) return p;
+    return { ...p, amount: p.amount ? Number(p.amount) : p.amount };
+  }
+
   static async create(paymentData) {
-    return await prisma.payment.create({
+    const payment = await prisma.payment.create({
       data: paymentData
     });
+    return this.formatPayment(payment);
   }
 
   static async findByUserId(userId) {
-    return await prisma.payment.findMany({
+    const payments = await prisma.payment.findMany({
       where: { userId },
       orderBy: { paidAt: 'desc' }
     });
+    return payments.map(this.formatPayment);
   }
 
   static async findAll({ skip = 0, take = 50 }) {
@@ -26,13 +33,14 @@ export class PaymentRepository {
       }),
       prisma.payment.count()
     ]);
-    return { payments, total };
+    return { payments: payments.map(this.formatPayment), total };
   }
 
   static async getTotalRevenue() {
     const aggregate = await prisma.payment.aggregate({
-      _sum: { amount: true }
+      _sum: { amount: true },
+      where: { status: 'PAID' }
     });
-    return aggregate._sum.amount || 0;
+    return aggregate._sum.amount ? Number(aggregate._sum.amount) : 0;
   }
 }

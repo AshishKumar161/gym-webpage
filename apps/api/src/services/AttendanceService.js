@@ -7,7 +7,7 @@ export class AttendanceService {
       userId,
       checkInTime,
       method,
-      status: 'present'
+      status: 'PRESENT'
     });
   }
 

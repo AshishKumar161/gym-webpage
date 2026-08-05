@@ -15,11 +15,43 @@ import couponRoutes from './couponRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import attendanceRoutes from './attendanceRoutes.js';
 import aiRoutes from './aiRoutes.js';
+import communicationRoutes from './communicationRoutes.js';
+import biRoutes from './biRoutes.js';
+import inventoryRoutes from './inventoryRoutes.js';
+import posRoutes from './posRoutes.js';
+import assetRoutes from './assetRoutes.js';
+import supplierRoutes from './supplierRoutes.js';
 import { getHealth } from '../../../controllers/healthController.js';
 
 const router = express.Router();
 
-// ─── Health Check Endpoint ───────────────────────────────────────────────────
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: System Health Status Check
+ *     tags:
+ *       - Health Check
+ *     responses:
+ *       200:
+ *         description: API system and database operational
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: 'string', example: 'OK' }
+ *                 uptime: { type: 'number', example: 124.5 }
+ *                 timestamp: { type: 'string', example: '2026-08-03T21:30:00.000Z' }
+ * /api/v1/health:
+ *   get:
+ *     summary: Version 1 API Health Check
+ *     tags:
+ *       - Health Check
+ *     responses:
+ *       200:
+ *         description: API v1 healthy
+ */
 router.get('/health', getHealth);
 
 // ─── Auth (Public + Protected) ────────────────────────────────────────────────
@@ -43,5 +75,11 @@ router.use('/coupons', couponRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/ai', aiRoutes);
+router.use('/communication', communicationRoutes);
+router.use('/bi', biRoutes);
+router.use('/inventory', inventoryRoutes);
+router.use('/pos', posRoutes);
+router.use('/assets', assetRoutes);
+router.use('/suppliers', supplierRoutes);
 
 export default router;

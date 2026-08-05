@@ -11,11 +11,12 @@ export class UserService {
   }
 
   static async updateUserProfile(userId, updateData) {
-    const user = await UserRepository.findById(userId);
-    if (!user) {
-      throw new NotFoundError('User profile not found.');
+    try {
+      return await UserRepository.update(userId, updateData);
+    } catch (error) {
+      if (error.code === 'P2025') throw new NotFoundError('User profile not found.');
+      throw error;
     }
-    return await UserRepository.update(userId, updateData);
   }
 
   static async listUsers({ page = 1, limit = 10, role = null }) {

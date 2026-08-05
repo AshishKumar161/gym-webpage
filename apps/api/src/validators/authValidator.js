@@ -20,15 +20,31 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required')
 });
 
-export const validateWithZod = (schema) => (req, res, next) => {
-  const result = schema.safeParse(req.body);
-  if (!result.success) {
-    const formattedErrors = result.error.errors.map((e) => ({
-      field: e.path.join('.'),
-      message: e.message
-    }));
-    return next(new ValidationError(formattedErrors[0]?.message || 'Validation failed', formattedErrors));
-  }
-  req.body = result.data;
-  next();
-};
+export const verifyOtpSchema = z.object({
+  email: z.string().email('Valid email required'),
+  otp: z.string().length(6, 'OTP must be 6 digits')
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Valid email required')
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Reset token required'),
+  newPassword: z.string()
+    .min(8, 'Password must be at least 8 characters long')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/\d/, 'Password must contain at least one number')
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string()
+    .min(8, 'New password must be at least 8 characters long')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/\d/, 'Password must contain at least one number')
+});
+
+

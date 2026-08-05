@@ -1,8 +1,8 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
-const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'fallback_access_secret_12345';
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret_67890';
+const getAccessSecret = () => process.env.JWT_ACCESS_SECRET || 'fallback_access_secret_12345_dev_only';
+const getRefreshSecret = () => process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret_67890_dev_only';
 const ACCESS_EXPIRES = process.env.JWT_ACCESS_EXPIRES_IN || '15m';
 const REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
@@ -10,28 +10,28 @@ const REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
  * Generates an Access Token for a given user payload.
  */
 export const generateAccessToken = (payload) => {
-  return jwt.sign(payload, ACCESS_SECRET, { expiresIn: ACCESS_EXPIRES });
+  return jwt.sign(payload, getAccessSecret(), { expiresIn: ACCESS_EXPIRES });
 };
 
 /**
  * Generates a Refresh Token for a given user payload with optional token ID (jti).
  */
 export const generateRefreshToken = (payload, refreshTokenId = crypto.randomUUID()) => {
-  return jwt.sign({ ...payload, jti: refreshTokenId }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES });
+  return jwt.sign({ ...payload, jti: refreshTokenId }, getRefreshSecret(), { expiresIn: REFRESH_EXPIRES });
 };
 
 /**
  * Verifies an Access Token.
  */
 export const verifyAccessToken = (token) => {
-  return jwt.verify(token, ACCESS_SECRET);
+  return jwt.verify(token, getAccessSecret());
 };
 
 /**
  * Verifies a Refresh Token.
  */
 export const verifyRefreshToken = (token) => {
-  return jwt.verify(token, REFRESH_SECRET);
+  return jwt.verify(token, getRefreshSecret());
 };
 
 /**
@@ -43,6 +43,7 @@ export const sendRefreshTokenCookie = (res, token) => {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? 'strict' : 'lax',
+    path: '/api/v1/auth',
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   });
 };
@@ -55,6 +56,7 @@ export const clearRefreshTokenCookie = (res) => {
   res.clearCookie('refreshToken', {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax'
+    sameSite: isProduction ? 'strict' : 'lax',
+    path: '/api/v1/auth'
   });
 };

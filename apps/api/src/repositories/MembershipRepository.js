@@ -1,35 +1,45 @@
 import prisma from '../config/prisma.js';
 
 export class MembershipRepository {
+  static formatMembership(m) {
+    if (!m) return m;
+    return { ...m, price: m.price ? Number(m.price) : m.price };
+  }
+
   static async findAll() {
-    return await prisma.membership.findMany({
+    const memberships = await prisma.membership.findMany({
       orderBy: { price: 'asc' }
     });
+    return memberships.map(this.formatMembership);
   }
 
   static async findById(id) {
-    return await prisma.membership.findUnique({
+    const membership = await prisma.membership.findUnique({
       where: { id }
     });
+    return this.formatMembership(membership);
   }
 
   static async create(membershipData) {
-    return await prisma.membership.create({
+    const membership = await prisma.membership.create({
       data: membershipData
     });
+    return this.formatMembership(membership);
   }
 
   static async update(id, data) {
-    return await prisma.membership.update({
+    const membership = await prisma.membership.update({
       where: { id },
       data
     });
+    return this.formatMembership(membership);
   }
 
   static async delete(id) {
-    return await prisma.membership.delete({
+    const membership = await prisma.membership.delete({
       where: { id }
     });
+    return this.formatMembership(membership);
   }
 
   static async createSubscription(subscriptionData) {
@@ -39,9 +49,13 @@ export class MembershipRepository {
   }
 
   static async findActiveSubscriptionsByUserId(userId) {
-    return await prisma.subscription.findMany({
-      where: { userId, status: 'active' },
+    const subs = await prisma.subscription.findMany({
+      where: { userId, status: 'ACTIVE' },
       include: { membership: true }
     });
+    return subs.map(sub => ({
+      ...sub,
+      membership: this.formatMembership(sub.membership)
+    }));
   }
 }

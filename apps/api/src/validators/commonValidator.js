@@ -10,14 +10,22 @@ export const paginationQuerySchema = z.object({
   limit: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 10))
 });
 
-export const validateRequestParams = (schema) => (req, res, next) => {
-  const result = schema.safeParse(req.params);
-  if (!result.success) {
-    const formattedErrors = result.error.errors.map((e) => ({
-      field: e.path.join('.'),
-      message: e.message
-    }));
-    return next(new ValidationError('Invalid URL parameters', formattedErrors));
-  }
-  next();
-};
+export const membershipSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  price: z.number().min(0, 'Price must be a positive number'),
+  durationMonths: z.number().int().min(1, 'Duration must be at least 1 month'),
+  description: z.string().optional(),
+  features: z.array(z.string()).optional()
+});
+
+export const inquirySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Valid email is required').optional().or(z.literal('')),
+  phone: z.string().min(1, 'Phone number is required'),
+  subject: z.string().optional(),
+  message: z.string().optional()
+});
+
+export const updateInquiryStatusSchema = z.object({
+  status: z.enum(['PENDING', 'CONTACTED', 'RESOLVED', 'CLOSED'])
+});

@@ -6,15 +6,15 @@ export const ADMIN_NAV_ITEMS = [
   { id: 'overview', icon: '📊', label: 'Dashboard & Revenue' },
   { id: 'members', icon: '👥', label: 'Manage Members' },
   { id: 'trainers', icon: '👨‍🏫', label: 'Manage Trainers' },
-  { id: 'staff', icon: '👔', label: 'Manage Staff' },
-  { id: 'attendance', icon: '📅', label: 'Attendance Logs' },
   { id: 'plans', icon: '💳', label: 'Membership Plans' },
+  { id: 'attendance', icon: '📅', label: 'Attendance Logs' },
   { id: 'payments', icon: '🧾', label: 'Payments & Invoices' },
-  { id: 'classes', icon: '🏋️', label: 'Manage Classes' },
-  { id: 'coupons', icon: '🎟️', label: 'Manage Coupons' },
-  { id: 'blogs', icon: '📝', label: 'Manage Blogs' },
-  { id: 'reviews', icon: '⭐', label: 'Manage Reviews' },
+  { id: 'inventory', icon: '📦', label: 'Inventory' },
+  { id: 'pos', icon: '🛒', label: 'Point of Sale' },
+  { id: 'assets', icon: '🏋️', label: 'Assets & Equipment' },
+  { id: 'suppliers', icon: '🚚', label: 'Suppliers & PO' },
   { id: 'notifications', icon: '🔔', label: 'Notifications' },
+  { id: 'analytics', icon: '📊', label: 'BI Analytics' },
   { id: 'settings', icon: '⚙️', label: 'System Settings' }
 ];
 
@@ -27,8 +27,8 @@ export const TRAINER_NAV_ITEMS = [
   { id: 'classes', icon: '🕒', label: 'Schedule Classes' },
   { id: 'progress', icon: '📈', label: 'Progress Reports' },
   { id: 'chat', icon: '💬', label: 'Direct Chat' },
-  { id: 'videos', icon: '🎥', label: 'Video Uploads' },
-  { id: 'notifications', icon: '🔔', label: 'Notifications' }
+  { id: 'notifications', icon: '🔔', label: 'Notifications' },
+  { id: 'profile', icon: '👤', label: 'My Profile' }
 ];
 
 export const MEMBER_NAV_ITEMS = [
@@ -40,10 +40,11 @@ export const MEMBER_NAV_ITEMS = [
   { id: 'diets', icon: '🥗', label: 'My Diet Plan' },
   { id: 'qr-checkin', icon: '📲', label: 'QR Check-in' },
   { id: 'attendance', icon: '📅', label: 'My Attendance' },
-  { id: 'calculator', icon: '🧮', label: 'BMI & Calorie Calc' },
+  { id: 'progress', icon: '📉', label: 'My Progress & BMI' },
   { id: 'goals', icon: '🎯', label: 'Fitness Goals' },
-  { id: 'book-class', icon: '🕒', label: 'Book a Class' },
-  { id: 'notifications', icon: '🔔', label: 'Notifications' }
+  { id: 'store', icon: '🏪', label: 'Gym Store' },
+  { id: 'notifications', icon: '🔔', label: 'Notifications' },
+  { id: 'settings', icon: '⚙️', label: 'System Settings' }
 ];
 
 export function renderSidebar(role, activeTab, onSelectTab) {

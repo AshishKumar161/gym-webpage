@@ -30,9 +30,11 @@ export const errorHandler = (err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     message,
-    errorCode,
-    errors,
-    timestamp: new Date().toISOString(),
-    requestId
+    data: null,
+    errors: errors || [{ message, code: errorCode }],
+    meta: {
+      timestamp: new Date().toISOString(),
+      requestId
+    }
   });
 };

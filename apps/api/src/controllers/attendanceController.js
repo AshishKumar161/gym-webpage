@@ -3,14 +3,14 @@ import { sendResponse } from '../utils/responseFormatter.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const checkIn = asyncHandler(async (req, res) => {
-  const userId = req.user.id || req.user._id?.toString();
+  const userId = req.user.id;
   const { method } = req.body;
   const attendance = await AttendanceService.checkIn(userId, method);
   return sendResponse(res, 201, 'Check-in recorded successfully.', attendance);
 });
 
 export const getMyAttendance = asyncHandler(async (req, res) => {
-  const userId = req.user.id || req.user._id?.toString();
+  const userId = req.user.id;
   const records = await AttendanceService.getUserAttendance(userId);
   return sendResponse(res, 200, 'Attendance history retrieved successfully.', records);
 });

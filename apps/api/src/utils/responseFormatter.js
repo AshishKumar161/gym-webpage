@@ -16,9 +16,12 @@ export const sendResponse = (res, statusCode, message, data = null, meta = {}) =
     success: statusCode >= 200 && statusCode < 300,
     message,
     data,
-    timestamp: new Date().toISOString(),
-    requestId,
-    ...meta
+    errors: null,
+    meta: {
+      timestamp: new Date().toISOString(),
+      requestId,
+      ...meta
+    }
   };
 
   return res.status(statusCode).json(responsePayload);

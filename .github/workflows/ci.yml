@@ -1,0 +1,60 @@
+name: Gym Platform CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: gymadmin
+          POSTGRES_PASSWORD: gympassword
+          POSTGRES_DB: a2revampgym_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://gymadmin:gympassword@localhost:5432/a2revampgym_test?schema=public
+      JWT_ACCESS_SECRET: test_access_secret
+      JWT_REFRESH_SECRET: test_refresh_secret
+      CLIENT_URL: http://localhost:5173
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Prisma Validate
+      run: npx prisma validate
+      working-directory: ./apps/api
+
+    - name: Prisma Push (Test DB Setup)
+      run: npx prisma db push --accept-data-loss
+      working-directory: ./apps/api
+
+    - name: Build Web App
+      run: npm run build
+      working-directory: ./apps/web
+
+    - name: Run API Tests (Unit & Integration)
+      run: npm test
+      working-directory: ./apps/api

@@ -1,7 +1,10 @@
-import { verifyAccessToken } from '../utils/jwt.js';
+import { verifyAccessToken, verifyRefreshToken } from '../utils/jwt.js';
 import { UserRepository } from '../repositories/UserRepository.js';
-import prisma from '../config/prisma.js';
+import { SessionRepository } from '../repositories/SessionRepository.js';
+import crypto from 'crypto';
 import logger from '../utils/logger.js';
+
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 /**
  * protect — Middleware to authenticate requests via JWT Bearer token or HttpOnly Cookie.
@@ -14,58 +17,62 @@ export const protect = async (req, res, next) => {
     token = req.headers.authorization.split(' ')[1];
   }
 
-  if (!token) {
-    if (req.path === '/me' || req.path === '/auth/me') {
+  if (token) {
+    try {
+      const decoded = verifyAccessToken(token);
+      const user = await UserRepository.findById(decoded.id);
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          errorCode: 'UNAUTHORIZED',
+          message: 'User account no longer exists.'
+        });
+      }
+
+      req.user = user;
       return next();
+    } catch (error) {
+      logger.warn(`[AUTH] Access Token invalid/expired: ${error.message}`);
     }
-    return res.status(401).json({
-      success: false,
-      code: 'UNAUTHORIZED',
-      message: 'Authentication required. Please log in.'
-    });
   }
 
-  try {
-    const decoded = verifyAccessToken(token);
-    const user = await UserRepository.findById(decoded.id);
+  // Fallback to HttpOnly Refresh Token Cookie if Bearer Token is missing or expired
+  const refreshTokenCookie = req.cookies?.refreshToken;
+  if (refreshTokenCookie) {
+    try {
+      const decodedRefresh = verifyRefreshToken(refreshTokenCookie);
+      const tokenHash = hashToken(refreshTokenCookie);
+      const activeSession = await SessionRepository.findActiveByUserIdAndHash(decodedRefresh.id, tokenHash);
 
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        code: 'UNAUTHORIZED',
-        message: 'User account no longer exists.'
-      });
+      if (activeSession) {
+        const user = await UserRepository.findById(decodedRefresh.id);
+        if (user) {
+          req.user = user;
+          return next();
+        }
+      }
+    } catch (err) {
+      logger.warn(`[AUTH] Refresh Cookie invalid: ${err.message}`);
     }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    if (req.path === '/me' || req.path === '/auth/me') {
-      return next();
-    }
-    logger.error(`[AUTH] JWT Error: ${error.message}`);
-    return res.status(401).json({
-      success: false,
-      code: 'TOKEN_EXPIRED',
-      message: 'Session expired. Please refresh your token.'
-    });
   }
+
+  return res.status(401).json({
+    success: false,
+    errorCode: 'UNAUTHORIZED',
+    message: 'Authentication required. Please log in.'
+  });
 };
 
 /**
  * authorize(...roles) — Case-insensitive Backend Role-Based Access Control (RBAC) middleware.
- * Usage:
- *   router.use('/admin', protect, authorize('ADMIN'));
- *   router.use('/trainer', protect, authorize('TRAINER', 'ADMIN'));
- *   router.use('/member', protect, authorize('MEMBER', 'TRAINER', 'ADMIN'));
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        code: 'UNAUTHORIZED',
+        errorCode: 'UNAUTHORIZED',
         message: 'Authentication required.'
       });
     }
@@ -74,10 +81,10 @@ export const authorize = (...roles) => {
     const allowedRolesNormalized = roles.map((r) => r.toUpperCase());
 
     if (!allowedRolesNormalized.includes(userRoleNormalized)) {
-      logger.warn(`[RBAC] FORBIDDEN: uid=${req.user.id || req.user._id} role=${req.user.role} attempted ${req.method} ${req.originalUrl}`);
+      logger.warn(`[RBAC] FORBIDDEN: uid=${req.user.id} role=${req.user.role} attempted ${req.method} ${req.originalUrl}`);
       return res.status(403).json({
         success: false,
-        code: 'FORBIDDEN',
+        errorCode: 'FORBIDDEN',
         message: `Access denied. Required role: [${roles.join(', ')}]. Your role: ${req.user.role}.`
       });
     }

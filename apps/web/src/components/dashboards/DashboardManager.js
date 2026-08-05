@@ -21,10 +21,14 @@ import {
   isAuthenticated,
   getCurrentUser,
   canAccessDashboard,
+  getLoadingSkeleton,
+  getErrorStateHTML,
   logoutUser,
   onAuthChange
 } from '../../utils/auth.js';
 import { openAuthModal } from '../auth/AuthModal.js';
+import { AIChatWidget } from '../ai/AIChatWidget.js';
+import { NotificationWidget } from '../notifications/NotificationWidget.js';
 
 let currentRole = 'member';
 let currentTab = 'overview';
@@ -63,6 +67,14 @@ export function initDashboardManager() {
   const roleBtns = qsa('.role-tab-btn');
 
   if (!modal) return;
+
+  // Initialize AI Chat Widget on the body (persists across dashboards)
+  if (!document.getElementById('ai-chat-toggle')) {
+    const aiContainer = document.createElement('div');
+    aiContainer.id = 'ai-chat-container';
+    document.body.appendChild(aiContainer);
+    new AIChatWidget('ai-chat-container');
+  }
 
   openBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -126,6 +138,18 @@ export function openDashboard(role = 'member') {
 
   modal.classList.add('active');
   lockScroll();
+  
+  // Show bell and initialize widget
+  const bellBtn = qs('#notification-bell');
+  if (bellBtn) {
+    bellBtn.style.display = 'block';
+    if (!window.notificationWidget) {
+      window.notificationWidget = new NotificationWidget();
+    } else {
+      window.notificationWidget.fetchNotifications();
+    }
+  }
+
   updateDashboard();
 }
 
@@ -136,7 +160,7 @@ export function closeDashboard() {
   unlockScroll();
 }
 
-function updateDashboard() {
+async function updateDashboard() {
   const sidebar = qs('#dash-sidebar');
   const content = qs('#dash-content');
 
@@ -155,19 +179,28 @@ function updateDashboard() {
       return;
     }
 
-    if (currentTab === 'scanner') {
-      content.innerHTML = renderQRScannerView();
-    } else if (currentTab === 'calendar' || currentTab === 'classes') {
-      content.innerHTML = renderCalendarView();
-    } else if (currentRole === 'admin') {
-      content.innerHTML = renderAdminView(currentTab);
-    } else if (currentRole === 'trainer') {
-      content.innerHTML = renderTrainerView(currentTab);
-    } else {
-      content.innerHTML = renderMemberView(currentTab);
-    }
+    // Set globally so the retry buttons can access it
+    window.retryDashboardRender = updateDashboard;
 
-    attachActionListeners();
+    // Show Skeleton Loader
+    content.innerHTML = getLoadingSkeleton();
+
+    try {
+      if (currentTab === 'scanner') {
+        content.innerHTML = renderQRScannerView();
+      } else if (currentTab === 'calendar' || currentTab === 'classes') {
+        content.innerHTML = renderCalendarView();
+      } else if (currentRole === 'admin') {
+        content.innerHTML = await renderAdminView(currentTab);
+      } else if (currentRole === 'trainer') {
+        content.innerHTML = await renderTrainerView(currentTab);
+      } else {
+        content.innerHTML = await renderMemberView(currentTab);
+      }
+      attachActionListeners();
+    } catch (err) {
+      content.innerHTML = getErrorStateHTML(err.message, 'retryDashboardRender');
+    }
   }
 }
 

@@ -4,7 +4,29 @@ import cors from 'cors';
 export const configureSecurityMiddlewares = (app) => {
   // Helmet HTTP security headers
   app.use(helmet({
-    crossOriginResourcePolicy: { policy: 'cross-origin' }
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        imgSrc: ["'self'", "data:", "https://res.cloudinary.com"],
+        connectSrc: ["'self'", process.env.CLIENT_URL || 'http://localhost:5173'],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
+      }
+    },
+    crossOriginEmbedderPolicy: false, // Prevents breaking Cloudinary images if not configured
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allows cross-origin API requests
+    dnsPrefetchControl: { allow: false },
+    frameguard: { action: 'deny' }, // X-Frame-Options: DENY
+    hidePoweredBy: true,
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true }, // Strict-Transport-Security
+    ieNoOpen: true,
+    noSniff: true, // X-Content-Type-Options: nosniff
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xssFilter: true
   }));
 
   // Dynamic CORS configuration

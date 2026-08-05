@@ -10,7 +10,7 @@ export class PaymentService {
       planName,
       amount,
       paymentMethod,
-      status: 'paid'
+      status: 'PAID'
     });
   }
 

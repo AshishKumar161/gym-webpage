@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  app:
+  api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -10,26 +10,43 @@ services:
     environment:
       - PORT=5000
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://mongo:27017/a2revampgym
+      - DATABASE_URL=postgresql://gymadmin:gympassword@postgres:5432/a2revampgym?schema=public
       - REDIS_URI=redis://redis:6379
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - CLIENT_URL=${CLIENT_URL:-http://localhost:5173}
     depends_on:
-      - mongo
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: always
 
-  mongo:
-    image: mongo:7.0
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: gymadmin
+      POSTGRES_PASSWORD: gympassword
+      POSTGRES_DB: a2revampgym
     ports:
-      - "27017:27017"
+      - "5432:5432"
     volumes:
-      - mongo-data:/data/db
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gymadmin -d a2revampgym"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
   redis:
     image: redis:7.2-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
     restart: always
 
 volumes:
-  mongo-data:
+  postgres-data:
+  redis-data:

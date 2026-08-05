@@ -19,13 +19,21 @@ export class MembershipService {
   }
 
   static async updateMembership(id, data) {
-    await this.getMembershipById(id);
-    return await MembershipRepository.update(id, data);
+    try {
+      return await MembershipRepository.update(id, data);
+    } catch (error) {
+      if (error.code === 'P2025') throw new NotFoundError('Membership plan not found.');
+      throw error;
+    }
   }
 
   static async deleteMembership(id) {
-    await this.getMembershipById(id);
-    return await MembershipRepository.delete(id);
+    try {
+      return await MembershipRepository.delete(id);
+    } catch (error) {
+      if (error.code === 'P2025') throw new NotFoundError('Membership plan not found.');
+      throw error;
+    }
   }
 
   static async subscribeUser(userId, membershipId, paymentRef = '') {
@@ -38,7 +46,7 @@ export class MembershipService {
       membershipId,
       startDate,
       endDate,
-      status: 'active',
+      status: 'ACTIVE',
       paymentReference: paymentRef
     });
   }

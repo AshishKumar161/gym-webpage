@@ -8,9 +8,10 @@ export class AttendanceRepository {
   }
 
   static async findByUserId(userId, limit = 20) {
+    const cappedLimit = Math.min(limit, 100);
     return await prisma.attendance.findMany({
       where: { userId },
-      take: limit,
+      take: cappedLimit,
       orderBy: { date: 'desc' }
     });
   }
@@ -19,7 +20,7 @@ export class AttendanceRepository {
     const [records, total] = await Promise.all([
       prisma.attendance.findMany({
         skip,
-        take,
+        take: Math.min(take, 100),
         include: {
           user: {
             select: { id: true, name: true, email: true }
@@ -34,7 +35,7 @@ export class AttendanceRepository {
 
   static async countToday() {
     const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
 
     return await prisma.attendance.count({
       where: {

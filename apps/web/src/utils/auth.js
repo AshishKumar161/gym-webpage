@@ -11,7 +11,7 @@
 
 import { API_BASE } from '../config/api.js';
 
-async function safeFetch(url, options) {
+async function safeFetch(url, options = {}) {
   try {
     const res = await fetch(url, options);
     let data;
@@ -21,7 +21,9 @@ async function safeFetch(url, options) {
       data = {};
     }
     if (!res.ok) {
-      const msg = data.message || (res.status === 409 ? 'Email already registered.' : res.status === 401 ? 'Invalid email or password.' : 'Request failed');
+      const serverMsg = (data.errors && data.errors[0]?.message) || data.message;
+      const fallbackMsg = res.status === 409 ? 'Email already registered.' : res.status === 401 ? 'Invalid email or password.' : 'Request failed';
+      const msg = serverMsg || fallbackMsg;
       throw new Error(msg);
     }
     return data;
@@ -32,7 +34,6 @@ async function safeFetch(url, options) {
     throw err;
   }
 }
-
 
 // In-memory store — never persisted to localStorage
 let _accessToken = null;
@@ -49,7 +50,7 @@ const emit = () => listeners.forEach(fn => fn(_currentUser));
 export const getAccessToken = () => _accessToken;
 export const getCurrentUser = () => _currentUser;
 export const isAuthenticated = () => !!_accessToken && !!_currentUser;
-export const hasRole = (role) => _currentUser?.role === role;
+export const hasRole = (role) => (_currentUser?.role || '').toLowerCase() === role.toLowerCase();
 export const isAdmin = () => hasRole('admin');
 export const isTrainer = () => hasRole('trainer');
 export const isMember = () => hasRole('member');
@@ -82,7 +83,7 @@ function scheduleRefresh(token) {
 // ─── Core Auth Actions ─────────────────────────────────────────────────────────
 
 /**
- * Register a new user. Returns { success, user } or throws.
+ * Register a new user. Returns user object or throws error.
  */
 export async function registerUser({ name, email, password, phone = '' }) {
   const data = await safeFetch(`${API_BASE}/auth/register`, {
@@ -92,15 +93,16 @@ export async function registerUser({ name, email, password, phone = '' }) {
     body: JSON.stringify({ name, email, password, phone })
   });
 
-  _accessToken = data.accessToken;
-  _currentUser = data.user;
+  const payload = data.data || data;
+  _accessToken = payload.accessToken;
+  _currentUser = payload.user;
   scheduleRefresh(_accessToken);
   emit();
-  return data;
+  return payload;
 }
 
 /**
- * Login with email & password. Returns { success, user } or throws.
+ * Login with email & password. Returns user object or throws error.
  */
 export async function loginUser({ email, password }) {
   const data = await safeFetch(`${API_BASE}/auth/login`, {
@@ -110,13 +112,13 @@ export async function loginUser({ email, password }) {
     body: JSON.stringify({ email, password })
   });
 
-  _accessToken = data.accessToken;
-  _currentUser = data.user;
+  const payload = data.data || data;
+  _accessToken = payload.accessToken;
+  _currentUser = payload.user;
   scheduleRefresh(_accessToken);
   emit();
-  return data;
+  return payload;
 }
-
 
 /**
  * Logout current session. Clears memory and removes refresh token cookie via server.
@@ -150,7 +152,6 @@ export async function refreshSession() {
     });
 
     if (!res.ok) {
-      // Refresh token expired or revoked — clear state
       _accessToken = null;
       _currentUser = null;
       emit();
@@ -158,16 +159,21 @@ export async function refreshSession() {
     }
 
     const data = await res.json();
-    _accessToken = data.accessToken;
+    const payload = data.data || data;
+    _accessToken = payload.accessToken;
 
-    // Fetch full user profile
-    const meRes = await fetch(`${API_BASE}/auth/me`, {
-      headers: { Authorization: `Bearer ${_accessToken}` },
-      credentials: 'include'
-    });
-    if (meRes.ok) {
-      const meData = await meRes.json();
-      _currentUser = meData.user;
+    if (payload.user) {
+      _currentUser = payload.user;
+    } else {
+      // Fetch user profile if not in refresh response
+      const meRes = await fetch(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${_accessToken}` },
+        credentials: 'include'
+      });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        _currentUser = meData.data?.user || meData.user;
+      }
     }
 
     scheduleRefresh(_accessToken);
@@ -184,7 +190,6 @@ export async function refreshSession() {
 /**
  * Bootstrap auth on application load.
  * Attempts to restore session from refresh token cookie.
- * Returns true if session restored, false if guest.
  */
 export async function initAuth() {
   return await refreshSession();
@@ -194,13 +199,39 @@ export async function initAuth() {
  * Forgot password — sends reset email.
  */
 export async function forgotPassword(email) {
-  const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+  const data = await safeFetch(`${API_BASE}/auth/forgot-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'Request failed');
+  return data;
+}
+
+/**
+ * Reset password using token.
+ */
+export async function resetPassword(token, newPassword) {
+  const data = await safeFetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, newPassword })
+  });
+  return data;
+}
+
+/**
+ * Change current user password.
+ */
+export async function changePassword(currentPassword, newPassword) {
+  const data = await safeFetch(`${API_BASE}/auth/change-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeader()
+    },
+    credentials: 'include',
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
   return data;
 }
 
@@ -208,13 +239,11 @@ export async function forgotPassword(email) {
  * Verify OTP for email verification.
  */
 export async function verifyOTP(email, otp) {
-  const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+  const data = await safeFetch(`${API_BASE}/auth/verify-otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, otp })
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'OTP verification failed');
   return data;
 }
 
@@ -226,11 +255,85 @@ export function authHeader() {
 }
 
 /**
+ * Authenticated safe fetch wrapper with offline detection and auto-retries.
+ */
+export async function safeFetchApi(endpoint, options = {}, retries = 1) {
+  if (!navigator.onLine) {
+    throw new Error('OFFLINE_ERROR');
+  }
+  
+  const url = `${API_BASE}${endpoint}`;
+  const fetchOptions = {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeader(),
+      ...(options.headers || {})
+    },
+    credentials: 'include'
+  };
+
+  try {
+    const res = await fetch(url, fetchOptions);
+    if (res.status === 401 && retries > 0) {
+      // Attempt token refresh and retry once
+      const refreshed = await refreshSession();
+      if (refreshed) {
+        return safeFetchApi(endpoint, options, 0);
+      }
+    }
+    
+    let data;
+    try { data = await res.json(); } catch { data = null; }
+    
+    if (!res.ok) {
+      throw new Error(data?.message || 'API_ERROR');
+    }
+    return data?.data || data;
+  } catch (err) {
+    if (err.message === 'OFFLINE_ERROR') throw err;
+    if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
+      throw new Error('NETWORK_ERROR');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Common Loading Skeleton HTML
+ */
+export const getLoadingSkeleton = () => `
+  <div style="display:flex; flex-direction:column; gap:1.5rem; animation: pulse 1.5s infinite ease-in-out;">
+    <div style="height:40px; width:40%; background:var(--bg-surface-2); border-radius:8px;"></div>
+    <div class="dash-metrics-grid">
+      <div style="height:100px; background:var(--bg-surface-2); border-radius:12px;"></div>
+      <div style="height:100px; background:var(--bg-surface-2); border-radius:12px;"></div>
+      <div style="height:100px; background:var(--bg-surface-2); border-radius:12px;"></div>
+    </div>
+    <div style="height:300px; background:var(--bg-surface-2); border-radius:12px;"></div>
+  </div>
+`;
+
+/**
+ * Common Error State HTML
+ */
+export const getErrorStateHTML = (errorType, retryFnName) => `
+  <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:3rem;">
+    <div style="font-size:3rem; margin-bottom:1rem;">${errorType === 'OFFLINE_ERROR' ? '📡' : '⚠️'}</div>
+    <h3 style="font-size:1.5rem; margin-bottom:0.5rem; color:var(--text);">${errorType === 'OFFLINE_ERROR' ? 'You are offline' : 'Failed to load data'}</h3>
+    <p style="color:var(--text-secondary); margin-bottom:1.5rem;">
+      ${errorType === 'OFFLINE_ERROR' ? 'Please check your internet connection and try again.' : 'An error occurred while communicating with the server.'}
+    </p>
+    <button class="btn btn-primary" onclick="${retryFnName}()">Try Again</button>
+  </div>
+`;
+
+/**
  * Check if the current user is allowed to view a given dashboard role.
  * Admin can see all. Others can only see their own dashboard.
  */
 export function canAccessDashboard(requestedRole) {
   if (!isAuthenticated()) return false;
   if (isAdmin()) return true;
-  return _currentUser.role === requestedRole;
+  return (_currentUser?.role || '').toLowerCase() === requestedRole.toLowerCase();
 }
