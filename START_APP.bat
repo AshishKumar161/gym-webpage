@@ -10,6 +10,10 @@ echo ===========================================================================
 echo Working Directory: %CD%
 echo.
 
+:: Detect Local Network IP Address dynamically
+set "LOCAL_IP=localhost"
+for /f "usebackq tokens=*" %%i in (`powershell -Command "(Get-NetIPAddress -AddressFamily IPv4 -PrefixOrigin Dhcp | Select-Object -First 1).IPAddress"`) do set "LOCAL_IP=%%i"
+
 :: 1. Check Docker Status
 echo [1/4] Checking Docker status...
 docker info >nul 2>&1
@@ -32,9 +36,9 @@ echo.
 echo Docker is not available. Starting local Node.js mode instead...
 echo.
 start "A2 Gym Backend API" cmd /k "cd /d "%~dp0" && npm --prefix apps/api run dev"
-timeout /t 3 /nobreak >nul
+ping 127.0.0.1 -n 4 >nul
 start "A2 Gym Frontend Web" cmd /k "cd /d "%~dp0" && npm --prefix apps/web run dev"
-timeout /t 4 /nobreak >nul
+ping 127.0.0.1 -n 5 >nul
 start http://localhost:5173
 echo.
 echo Local Node.js servers started!
@@ -71,9 +75,10 @@ echo.
 echo ================================================================================
 echo                    SUCCESS! APPLICATION IS NOW LIVE
 echo ================================================================================
-echo  - Frontend Web App  : http://localhost:5173
-echo  - Backend REST API  : http://localhost:5000
-echo  - API Docs          : http://localhost:5000/api/docs
+echo  - Localhost (This PC)   : http://localhost:5173
+echo  - Wi-Fi / Local Net     : http://%LOCAL_IP%:5173  (Use on phone/other devices)
+echo  - Backend REST API      : http://localhost:5000
+echo  - API Docs              : http://localhost:5000/api/docs
 echo ================================================================================
 echo.
 echo Press any key to exit this window. (Containers will keep running in Docker)
