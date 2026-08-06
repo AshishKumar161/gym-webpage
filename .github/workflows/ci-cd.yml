@@ -15,6 +15,27 @@ jobs:
     name: Monorepo Audit, Build & Test
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: gymadmin
+          POSTGRES_PASSWORD: gympassword
+          POSTGRES_DB: a2revampgym_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://gymadmin:gympassword@localhost:5432/a2revampgym_test?schema=public
+      JWT_ACCESS_SECRET: test_access_secret_32_characters_long_key_for_testing
+      JWT_REFRESH_SECRET: test_refresh_secret_32_characters_long_key_for_testing
+      CLIENT_URL: http://localhost:5173
+
     steps:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
@@ -23,15 +44,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install Monorepo Workspace Dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Prisma Validate
+        run: npx prisma validate
+        working-directory: ./apps/api
+
+      - name: Prisma Push (Test DB Setup)
+        run: npx prisma db push --accept-data-loss
+        working-directory: ./apps/api
 
       - name: Run Backend Test Suite (apps/api)
         run: npm test
+        working-directory: ./apps/api
 
       - name: Build Production Frontend (apps/web)
         run: npm run build
+        working-directory: ./apps/web
 
       - name: Validate Docker Production Build
         run: docker build -f docker/Dockerfile -t a2gym-platform .
+
