@@ -1,78 +1,97 @@
 @echo off
-TITLE A2 ReVamp Gym - Auto Docker Launcher
+:: Set working directory to the directory where this script is located
+cd /d "%~dp0"
+TITLE A2 ReVamp Gym - Auto Launcher
 COLOR 0A
 CLS
 
 echo ================================================================================
-echo                   A2 REVAMP GYM - AUTOMATIC DOCKER LAUNCHER
+echo                   A2 REVAMP GYM - AUTOMATIC APPLICATION LAUNCHER
 echo ================================================================================
+echo Working Directory: %CD%
 echo.
 
-:: 1. Check if Docker is installed and running
-echo [1/4] Checking Docker status...
+:: Check Docker Engine Status
+echo [1/4] Checking Docker Desktop status...
 docker info >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo --------------------------------------------------------------------------------
-    echo WARNING: Docker Desktop is not running or not started yet!
-    echo Attempting to start Docker Desktop automatically...
+    echo WARNING: Docker Desktop is not running or initializing!
+    echo Attempting to start Docker Desktop...
     echo --------------------------------------------------------------------------------
     
     if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
         start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    ) else (
-        echo ERROR: Docker Desktop installation not found at default location.
-        echo Please launch Docker Desktop manually and run this script again.
-        pause
-        exit /b 1
+        echo Waiting up to 25 seconds for Docker Engine to start...
+        
+        set /a count=0
+        :WAIT_DOCKER
+        timeout /t 3 /nobreak >nul
+        docker info >nul 2>&1
+        if %ERRORLEVEL% EQU 0 goto DOCKER_READY
+        set /a count+=1
+        if %count% LSS 8 (
+            echo Waiting for Docker Engine... (%count%/8)
+            goto WAIT_DOCKER
+        )
     )
     
-    echo Waiting for Docker engine to initialize (this may take up to 30 seconds)...
-    :WAIT_LOOP
+    echo.
+    echo Docker Desktop could not be detected. Starting local Node.js mode instead...
+    echo.
+    echo [STARTING LOCAL MODE] Launching API and Frontend dev servers...
+    start "A2 Gym Backend API" cmd /k "cd /d "%~dp0" && npm --prefix apps/api run dev"
     timeout /t 3 /nobreak >nul
-    docker info >nul 2>&1
-    if %ERRORLEVEL% NEQ 0 (
-        echo Still waiting for Docker engine...
-        goto WAIT_LOOP
-    )
-    echo Docker Desktop is now running!
+    start "A2 Gym Frontend Web" cmd /k "cd /d "%~dp0" && npm --prefix apps/web run dev"
+    timeout /t 4 /nobreak >nul
+    start http://localhost:5173
+    echo.
+    echo Local servers launched!
+    pause
+    exit /b 0
 )
 
-echo [OK] Docker engine is ready.
+:DOCKER_READY
+echo [OK] Docker Engine is active.
 echo.
 
-:: 2. Build and Start Docker Containers
-echo [2/4] Building and launching containers (PostgreSQL, Express API, Vite Web App)...
-echo Please wait a moment while containers build and initialize...
-echo.
-
-docker-compose up --build -d
+:: Launch Docker Compose Stack
+echo [2/4] Launching Docker containers (PostgreSQL, Express API, Vite Web App)...
+docker compose up --build -d >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    docker-compose up --build -d
+)
 
 if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Docker compose failed. Starting fallback local Node.js mode...
+    start "A2 Gym Backend API" cmd /k "cd /d "%~dp0" && npm --prefix apps/api run dev"
+    timeout /t 3 /nobreak >nul
+    start "A2 Gym Frontend Web" cmd /k "cd /d "%~dp0" && npm --prefix apps/web run dev"
+    timeout /t 4 /nobreak >nul
+    start http://localhost:5173
     echo.
-    echo [ERROR] Failed to start Docker containers! Please check Docker logs.
     pause
-    exit /b 1
+    exit /b 0
 )
 
 echo.
-echo [3/4] Waiting 5 seconds for services and database schema setup...
-timeout /t 5 /nobreak >nul
+echo [3/4] Waiting 4 seconds for database and service readiness...
+timeout /t 4 /nobreak >nul
 
-:: 3. Launch Web Application in Default Browser
-echo [4/4] Opening A2 ReVamp Gym Web App in your default web browser...
+:: Launch Web Browser
+echo [4/4] Opening Web App in your browser...
 start http://localhost:5173
 
 echo.
 echo ================================================================================
-echo                    SUCCESS! APPLICATION IS RUNNING
+echo                    SUCCESS! APPLICATION IS NOW LIVE
 echo ================================================================================
-echo  - Frontend Web App : http://localhost:5173
-echo  - Backend REST API : http://localhost:5000
-echo  - API Health Check : http://localhost:5000/health
-echo  - API Docs         : http://localhost:5000/api/docs
+echo  - Frontend Web App  : http://localhost:5173
+echo  - Backend REST API  : http://localhost:5000
+echo  - API Docs          : http://localhost:5000/api/docs
 echo ================================================================================
 echo.
-echo To stop the application later, simply double-click "STOP_APP.bat".
+echo Leave this window open, or double-click "STOP_APP.bat" when you want to stop.
 echo.
 pause
