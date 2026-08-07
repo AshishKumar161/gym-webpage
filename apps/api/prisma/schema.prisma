@@ -1,6 +1,3 @@
-// Prisma Schema for Neon PostgreSQL
-// Provider: PostgreSQL (Neon)
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,17 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  MEMBER
+// ==========================================
+// ENUMS
+// ==========================================
+enum RoleType {
+  SUPER_ADMIN
+  MANAGER
   TRAINER
-  ADMIN
-}
-
-enum PaymentStatus {
-  PENDING
-  PAID
-  FAILED
-  REFUNDED
+  MEMBER
+  RECEPTIONIST
 }
 
 enum SubscriptionStatus {
@@ -28,599 +23,305 @@ enum SubscriptionStatus {
   EXPIRED
   CANCELLED
   FROZEN
-  TRIAL
-  GRACE_PERIOD
 }
 
-enum AttendanceStatus {
-  PRESENT
-  ABSENT
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
 }
+
+enum AttendanceMethod {
+  QR_CODE
+  BIOMETRIC
+  MANUAL
+}
+
+// ==========================================
+// 1. AUTHENTICATION & BRANCHES
+// ==========================================
 
 model User {
-  id                   String    @id @default(uuid())
-  name                 String
-  email                String    @unique
-  password             String
-  phone                String?   @default("")
-  avatar               String?   @default("")
-  role                 Role      @default(MEMBER)
-  emailVerified        Boolean   @default(false)
-  otpCode              String?
-  otpExpires           DateTime?
-  resetPasswordToken   String?
-  resetPasswordExpires DateTime?
-  failedLoginAttempts  Int       @default(0)
-  accountLockedUntil   DateTime?
-  lastLogin            DateTime?
-  lastLoginIp          String?   @default("")
-  isDeleted            Boolean   @default(false)
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?   @unique
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  emailVerifiedAt DateTime?
+  branchId     String?
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // Auth additions
+  emailVerificationToken   String?
+  emailVerificationExpires DateTime?
+  resetPasswordToken       String?
+  resetPasswordExpires     DateTime?
+  lastPasswordChangeAt     DateTime?
 
   // Relations
-  sessions            Session[]
-  trainerProfile      Trainer?
-  subscriptions       Subscription[]
-  attendances         Attendance[]
-  memberWorkoutPlans  WorkoutPlan[]  @relation("MemberWorkoutPlans")
-  trainerWorkoutPlans WorkoutPlan[]  @relation("TrainerWorkoutPlans")
-  memberDietPlans     DietPlan[]     @relation("MemberDietPlans")
-  trainerDietPlans    DietPlan[]     @relation("TrainerDietPlans")
-  payments            Payment[]
-  notifications       Notification[]
-  auditLogs           AuditLog[]
-  aiConversations     AIConversation[]
-  aiTokenUsages       AITokenUsage[]
-  sentMessages        Message[]      @relation("SentMessages")
-  receivedMessages    Message[]      @relation("ReceivedMessages")
-  notificationPref    NotificationPreference?
-  userSales           Sale[]         @relation("UserSales")
-  cashierSales        Sale[]         @relation("CashierSales")
+  roles       UserRole[]
+  sessions    Session[]
+  memberships Membership[]
+  attendances Attendance[]
+  invoices    Invoice[]
 
+  // Profiles
+  memberProfile  MemberProfile?
+  trainerProfile TrainerProfile?
+
+  @@index([email])
+  @@index([lastName, firstName, phone]) // Phase 7: Search Index
+  @@index([branchId])
+  @@index([deletedAt])
   @@map("users")
 }
 
-model Trainer {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  specialization  String?  @default("")
-  experienceYears Int?     @default(0)
-  bio             String?  @default("")
-  rating          Float?   @default(5.0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model Role {
+  id          String   @id @default(uuid())
+  name        RoleType @unique
+  description String?
 
-  @@map("trainers")
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Permission {
+  id          String    @id @default(uuid())
+  action      String    // "create", "read", "update", "delete", "manage"
+  resource    String    // "member", "trainer", "payment", "report", "settings", "branch"
+  description String?
+  createdAt   DateTime  @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@unique([action, resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String    @id @default(uuid())
+  role         RoleType
+  permissionId String
+  createdAt    DateTime  @default(now())
+
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([role, permissionId])
+  @@index([role])
+  @@map("role_permissions")
 }
 
 model Session {
-  id               String   @id @default(uuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshTokenId   String   @unique
-  refreshTokenHash String
-  device           String   @default("Unknown Device")
-  browser          String   @default("Unknown Browser")
-  os               String   @default("Unknown OS")
-  ipAddress        String   @default("")
-  userAgent        String   @default("")
-  loginTime        DateTime @default(now())
-  lastActivity     DateTime @default(now())
-  expiresAt        DateTime
-  isRevoked        Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique @map("refresh_token")
+  userAgent    String?  @map("user_agent")
+  ipAddress    String?  @map("ip_address")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  @@index([userId, isRevoked])
+  @@index([userId])
+  @@index([refreshToken]) // Phase 7: Fast Session Lookup
   @@map("sessions")
 }
 
-model Membership {
+model Branch {
+  id           String    @id @default(uuid())
+  name         String
+  code         String    @unique
+  address      String
+  contactPhone String    @map("contact_phone")
+  contactEmail String    @map("contact_email")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  users       User[]
+  plans       Plan[]
+  attendances Attendance[]
+  invoices    Invoice[]
+  inventory   InventoryItem[]
+  equipment   Equipment[]
+  classes     Class[]
+
+  @@map("branches")
+}
+
+// ==========================================
+// 2. PROFILES & MEMBERSHIPS
+// ==========================================
+
+model MemberProfile {
   id             String   @id @default(uuid())
-  title          String   @unique
-  slug           String
-  price          Decimal  @db.Decimal(10, 2)
-  durationMonths Int
-  features       String[]
-  isPopular      Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  userId         String   @unique @map("user_id")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dob            DateTime
+  gender         String
+  heightCm       Decimal? @map("height_cm") @db.Decimal(5, 2)
+  weightKg       Decimal? @map("weight_kg") @db.Decimal(5, 2)
+  medicalNotes   String?  @map("medical_notes")
+  emergencyName  String?  @map("emergency_name")
+  emergencyPhone String?  @map("emergency_phone")
 
-  subscriptions Subscription[]
+  @@map("member_profiles")
+}
 
+model TrainerProfile {
+  id             String  @id @default(uuid())
+  userId         String  @unique @map("user_id")
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization String
+  experienceYrs  Int     @map("experience_years")
+  bio            String?
+
+  @@map("trainer_profiles")
+}
+
+model Plan {
+  id           String    @id @default(uuid())
+  branchId     String    @map("branch_id")
+  branch       Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name         String
+  description  String?
+  price        Decimal   @db.Decimal(10, 2)
+  durationDays Int       @map("duration_days")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  memberships Membership[]
+
+  @@index([branchId])
+  @@map("plans")
+}
+
+model Membership {
+  id        String             @id @default(uuid())
+  userId    String             @map("user_id")
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId    String             @map("plan_id")
+  plan      Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  startDate DateTime           @map("start_date") @db.Date
+  endDate   DateTime           @map("end_date") @db.Date
+  status    SubscriptionStatus @default(ACTIVE)
+
+  @@index([userId])
+  @@index([status, endDate]) // Phase 7: Fast dashboard queries for expiries
   @@map("memberships")
 }
 
-model Subscription {
-  id               String             @id @default(uuid())
-  userId           String
-  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  membershipId     String
-  membership       Membership         @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  startDate        DateTime           @default(now())
-  endDate          DateTime
-  nextBillingDate  DateTime?
-  cancellationReason String?
-  status           SubscriptionStatus @default(ACTIVE)
-  paymentReference String?            @default("")
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+// ==========================================
+// 3. BILLING & ATTENDANCE
+// ==========================================
 
-  @@index([userId, status])
-  @@map("subscriptions")
+model Invoice {
+  id            String   @id @default(uuid())
+  invoiceNumber String   @unique @map("invoice_number")
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  branchId      String   @map("branch_id")
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  subtotal      Decimal  @db.Decimal(10, 2)
+  tax           Decimal  @db.Decimal(10, 2)
+  totalAmount   Decimal  @map("total_amount") @db.Decimal(10, 2)
+  status        String   @default("UNPAID") // UNPAID, PAID, VOID
+  dueDate       DateTime @map("due_date") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  payment Payment?
+
+  @@index([userId, status]) // Phase 7: Find unpaid invoices per user
+  @@index([branchId, dueDate]) // Phase 7: Revenue reporting by branch and date
+  @@map("invoices")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  invoiceId     String        @unique @map("invoice_id")
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  amountPaid    Decimal       @map("amount_paid") @db.Decimal(10, 2)
+  paymentMethod String        @map("payment_method")
+  transactionId String?       @unique @map("transaction_id")
+  status        PaymentStatus @default(PENDING)
+  processedAt   DateTime      @default(now()) @map("processed_at")
+
+  @@index([processedAt(sort: Desc)]) // Phase 7: Fetch latest transactions quickly
+  @@map("payments")
 }
 
 model Attendance {
   id           String           @id @default(uuid())
-  userId       String
+  userId       String           @map("user_id")
   user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date         DateTime         @default(now())
-  checkInTime  String
-  checkOutTime String?          @default("")
-  method       String           @default("QR_CODE")
-  status       AttendanceStatus @default(PRESENT)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  branchId     String           @map("branch_id")
+  branch       Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  checkInTime  DateTime         @default(now()) @map("check_in_time")
+  checkOutTime DateTime?        @map("check_out_time")
+  entryMethod  AttendanceMethod @default(QR_CODE) @map("entry_method")
 
-  @@index([userId, date])
+  @@index([userId, checkInTime]) // Phase 7: User's attendance history
+  @@index([branchId, checkInTime(sort: Desc)]) // Phase 7: Who is currently at a branch
   @@map("attendances")
 }
 
-model WorkoutPlan {
-  id        String   @id @default(uuid())
-  title     String
-  memberId  String
-  member    User     @relation("MemberWorkoutPlans", fields: [memberId], references: [id], onDelete: Cascade)
-  trainerId String
-  trainer   User     @relation("TrainerWorkoutPlans", fields: [trainerId], references: [id], onDelete: Cascade)
-  dayOfWeek String   @default("Monday")
-  notes     String?  @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  exercises Exercise[]
-
-  @@index([memberId])
-  @@index([trainerId])
-  @@map("workout_plans")
-}
-
-model Exercise {
-  id            String      @id @default(uuid())
-  workoutPlanId String
-  workoutPlan   WorkoutPlan @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
-  name          String
-  sets          Int
-  reps          String
-  targetMuscle  String?     @default("")
-  videoUrl      String?     @default("")
-
-  @@index([workoutPlanId])
-  @@map("exercises")
-}
-
-model DietPlan {
-  id                  String   @id @default(uuid())
-  title               String
-  memberId            String
-  member              User     @relation("MemberDietPlans", fields: [memberId], references: [id], onDelete: Cascade)
-  trainerId           String
-  trainer             User     @relation("TrainerDietPlans", fields: [trainerId], references: [id], onDelete: Cascade)
-  dailyCaloriesTarget Int
-  waterIntakeLiters   Float    @default(3.0)
-  instructions        String?  @default("")
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  meals Meal[]
-
-  @@index([memberId])
-  @@index([trainerId])
-  @@map("diet_plans")
-}
-
-model Meal {
-  id         String   @id @default(uuid())
-  dietPlanId String
-  dietPlan   DietPlan @relation(fields: [dietPlanId], references: [id], onDelete: Cascade)
-  mealType   String
-  foodItems  String
-  calories   Int      @default(0)
-  protein    Int      @default(0)
-  carbs      Int      @default(0)
-  fats       Int      @default(0)
-
-  @@index([dietPlanId])
-  @@map("meals")
-}
-
-model Payment {
-  id               String        @id @default(uuid())
-  invoiceNumber    String        @unique
-  userId           String
-  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planName         String
-  amount           Decimal       @db.Decimal(10, 2)
-  subtotal         Decimal       @default(0) @db.Decimal(10, 2)
-  discount         Decimal       @default(0) @db.Decimal(10, 2)
-  tax              Decimal       @default(0) @db.Decimal(10, 2)
-  currency         String        @default("INR")
-  paymentMethod    String        @default("UPI")
-  gateway          String        @default("RAZORPAY")
-  gatewayOrderId   String?       @unique
-  gatewayPaymentId String?       @unique
-  couponId         String?
-  coupon           Coupon?       @relation(fields: [couponId], references: [id], onDelete: SetNull)
-  status           PaymentStatus @default(PAID)
-  paidAt           DateTime      @default(now())
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-
-  invoice Invoice?
-  refunds Refund[]
-
-  @@index([userId, status])
-  @@map("payments")
-}
-
-model Invoice {
-  id             String   @id @default(uuid())
-  paymentId      String   @unique
-  payment        Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  invoiceNumber  String   @unique
-  pdfUrl         String?
-  billingAddress String?
-  gstNumber      String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@map("invoices")
-}
-
-model Coupon {
-  id            String   @id @default(uuid())
-  code          String   @unique
-  discountType  String   // "PERCENTAGE" or "FIXED"
-  discountValue Decimal  @db.Decimal(10, 2)
-  validUntil    DateTime?
-  maxUses       Int?
-  currentUses   Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  payments Payment[]
-
-  @@map("coupons")
-}
-
-model Refund {
-  id              String   @id @default(uuid())
-  paymentId       String
-  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  gatewayRefundId String?  @unique
-  amount          Decimal  @db.Decimal(10, 2)
-  reason          String?
-  status          String   @default("PENDING") // PENDING, COMPLETED, FAILED
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([paymentId])
-  @@map("refunds")
-}
-
-model WebhookEvent {
-  id        String   @id @default(uuid())
-  eventId   String   @unique
-  gateway   String
-  type      String
-  payload   String
-  processed Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  @@index([eventId])
-  @@map("webhook_events")
-}
-
-model Notification {
-  id          String   @id @default(uuid())
-  recipientId String
-  recipient   User     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
-  title       String
-  message     String
-  type        String   @default("info")
-  actionUrl   String?
-  metadata    String?  // Stored as JSON string
-  channel     String   @default("IN_APP") // IN_APP, EMAIL, SMS, PUSH
-  isRead      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([recipientId, isRead])
-  @@map("notifications")
-}
-
-model Message {
-  id          String   @id @default(uuid())
-  senderId    String
-  sender      User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiverId  String
-  receiver    User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
-  content     String
-  attachment  String?
-  readAt      DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([senderId, receiverId])
-  @@map("messages")
-}
-
-model Announcement {
-  id           String   @id @default(uuid())
-  title        String
-  content      String
-  targetRole   String   @default("ALL") // ALL, MEMBER, TRAINER
-  scheduledFor DateTime?
-  expiresAt    DateTime?
-  authorId     String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@map("announcements")
-}
-
-model NotificationPreference {
-  id               String   @id @default(uuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  emailEnabled     Boolean  @default(true)
-  inAppEnabled     Boolean  @default(true)
-  pushEnabled      Boolean  @default(false)
-  marketingEnabled Boolean  @default(false)
-  updatedAt        DateTime @updatedAt
-
-  @@map("notification_preferences")
-}
-
-model DeliveryLog {
-  id           String   @id @default(uuid())
-  recipient    String
-  channel      String
-  subject      String?
-  status       String   @default("PENDING") // SENT, FAILED
-  errorMessage String?
-  createdAt    DateTime @default(now())
-
-  @@map("delivery_logs")
-}
-
-model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event     String
-  ipAddress String   @default("")
-  userAgent String   @default("")
-  details   String   @default("")
-  timestamp DateTime @default(now())
-
-  @@map("audit_logs")
-}
-
-model AIConversation {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      String   @default("user") // "user" or "model"
-  message   String
-  feature   String   @default("chat") // "chat", "workout", "diet", "admin_insights"
-  createdAt DateTime @default(now())
-
-  @@index([userId, feature])
-  @@map("ai_conversations")
-}
-
-model AITokenUsage {
-  id               String   @id @default(uuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider         String   @default("gemini")
-  feature          String
-  promptTokens     Int      @default(0)
-  completionTokens Int      @default(0)
-  totalTokens      Int      @default(0)
-  createdAt        DateTime @default(now())
-
-  @@index([userId, feature])
-  @@map("ai_token_usage")
-}
-
 // ==========================================
-// INVENTORY & POS SYSTEM
+// 4. INVENTORY & EQUIPMENT
 // ==========================================
 
-model ProductCategory {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+model InventoryItem {
+  id       String  @id @default(uuid())
+  branchId String  @map("branch_id")
+  branch   Branch  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name     String
+  sku      String  @unique
+  quantity Int     @default(0)
+  price    Decimal @db.Decimal(10, 2)
 
-  products    Product[]
-  @@map("product_categories")
+  @@index([branchId])
+  @@map("inventory_items")
 }
 
-model ProductBrand {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  products    Product[]
-  @@map("product_brands")
-}
-
-model Supplier {
-  id          String    @id @default(uuid())
-  name        String
-  contactName String?
-  email       String?
-  phone       String?
-  address     String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  purchaseOrders PurchaseOrder[]
-  @@map("suppliers")
-}
-
-model Product {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  sku         String    @unique
-  barcode     String?   @unique
-  price       Decimal   @db.Decimal(10, 2)
-  costPrice   Decimal?  @db.Decimal(10, 2)
-  taxRate     Decimal   @default(0) @db.Decimal(5, 2)
-  imageUrl    String?
-  isArchived  Boolean   @default(false)
-  
-  categoryId  String?
-  category    ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  brandId     String?
-  brand       ProductBrand?    @relation(fields: [brandId], references: [id], onDelete: SetNull)
-
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  inventory    Inventory?
-  saleItems    SaleItem[]
-  @@index([categoryId])
-  @@map("products")
-}
-
-model Inventory {
-  id               String    @id @default(uuid())
-  productId        String    @unique
-  product          Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity         Int       @default(0)
-  lowStockThreshold Int      @default(5)
-  lastRestockedAt  DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  transactions     InventoryTransaction[]
-  @@map("inventory")
-}
-
-model InventoryTransaction {
-  id          String    @id @default(uuid())
-  inventoryId String
-  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
-  type        String    // IN, OUT, ADJUSTMENT, RETURN
-  quantity    Int
-  reason      String?
-  userId      String?   // Admin who made the change
-  createdAt   DateTime  @default(now())
-
-  @@index([inventoryId])
-  @@map("inventory_transactions")
-}
-
-model PurchaseOrder {
-  id          String    @id @default(uuid())
-  supplierId  String
-  supplier    Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  status      String    @default("PENDING") // PENDING, COMPLETED, CANCELLED
-  totalAmount Decimal   @default(0) @db.Decimal(10, 2)
-  notes       String?
-  expectedDate DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@index([supplierId])
-  @@map("purchase_orders")
-}
-
-model Sale {
+model Equipment {
   id            String    @id @default(uuid())
-  receiptNumber String    @unique
-  userId        String?   // Null if walk-in customer
-  user          User?     @relation("UserSales", fields: [userId], references: [id], onDelete: SetNull)
-  cashierId     String    // Admin/Trainer processing the sale
-  cashier       User      @relation("CashierSales", fields: [cashierId], references: [id])
-  
-  subtotal      Decimal   @db.Decimal(10, 2)
-  discount      Decimal   @default(0) @db.Decimal(10, 2)
-  tax           Decimal   @default(0) @db.Decimal(10, 2)
-  total         Decimal   @db.Decimal(10, 2)
-  
-  paymentMethod String    @default("CASH") // CASH, CARD, UPI, ONLINE
-  status        String    @default("COMPLETED") // COMPLETED, REFUNDED
-  notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  branchId      String    @map("branch_id")
+  branch        Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name          String
+  serialNumber  String?   @unique @map("serial_number")
+  status        String    @default("ACTIVE") // ACTIVE, MAINTENANCE, RETIRED
+  lastServiceAt DateTime? @map("last_service_at")
 
-  items         SaleItem[]
-  @@index([userId])
-  @@index([cashierId])
-  @@map("sales")
+  @@index([branchId])
+  @@map("equipment")
 }
 
-model SaleItem {
-  id        String  @id @default(uuid())
-  saleId    String
-  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-  quantity  Int
-  price     Decimal @db.Decimal(10, 2)
-  tax       Decimal @default(0) @db.Decimal(10, 2)
-  total     Decimal @db.Decimal(10, 2)
+model Class {
+  id       String @id @default(uuid())
+  branchId String @map("branch_id")
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name     String
+  capacity Int
 
-  @@index([saleId])
-  @@index([productId])
-  @@map("sale_items")
-}
-
-// ==========================================
-// ASSET MANAGEMENT
-// ==========================================
-
-model Asset {
-  id              String    @id @default(uuid())
-  name            String
-  assetTag        String    @unique
-  category        String    // TREADMILL, BENCH, WEIGHTS, etc.
-  purchaseDate    DateTime?
-  purchasePrice   Decimal?  @db.Decimal(10, 2)
-  warrantyExpiry  DateTime?
-  status          String    @default("ACTIVE") // ACTIVE, MAINTENANCE, RETIRED
-  location        String?
-  notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  maintenanceLogs MaintenanceLog[]
-  @@map("assets")
-}
-
-model MaintenanceLog {
-  id          String   @id @default(uuid())
-  assetId     String
-  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  reportedBy  String   // userId
-  description String
-  cost        Decimal? @db.Decimal(10, 2)
-  status      String   @default("PENDING") // PENDING, IN_PROGRESS, RESOLVED
-  resolvedAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([assetId])
-  @@map("maintenance_logs")
+  @@map("classes")
 }
