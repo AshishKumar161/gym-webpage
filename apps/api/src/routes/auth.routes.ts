@@ -12,11 +12,25 @@ import {
 } from '../validators/auth.validator.js';
 import rateLimit from 'express-rate-limit';
 
-// Using mock authentication middleware for now
+import jwt from 'jsonwebtoken';
+
 const authenticate = (req: any, res: any, next: any) => {
-  // In a real scenario, this would decode the Bearer JWT and set req.user
-  req.user = { id: 'mock-uuid-for-testing', roles: ['MEMBER'] }; 
-  next();
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ status: 'fail', message: 'Access token required' });
+    }
+    const token = authHeader.split(' ')[1];
+    const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'supersecret_development_key';
+    const decoded = jwt.verify(token, secret) as any;
+    req.user = { id: decoded.id, branchId: decoded.branchId, roles: decoded.roles || [] };
+    next();
+  } catch (err: any) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ status: 'fail', message: 'Access token expired' });
+    }
+    return res.status(401).json({ status: 'fail', message: 'Invalid access token' });
+  }
 };
 
 const router = Router();
@@ -42,6 +56,7 @@ const passwordLimiter = rateLimit({
 router.post('/register', authLimiter, validateRequest(registerValidator), AuthController.register);
 router.post('/login', authLimiter, validateRequest(loginValidator), AuthController.login);
 router.post('/refresh', AuthController.refresh);
+router.post('/refresh-token', AuthController.refresh); // Frontend compatibility alias
 router.post('/forgot-password', passwordLimiter, validateRequest(forgotPasswordValidator), AuthController.forgotPassword);
 router.post('/reset-password', passwordLimiter, validateRequest(resetPasswordValidator), AuthController.resetPassword);
 router.get('/verify-email', validateRequest(verifyEmailValidator), AuthController.verifyEmail);

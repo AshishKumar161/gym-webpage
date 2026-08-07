@@ -23,6 +23,10 @@ app.use(cors({
 // 2. Core Routes
 app.use('/api/v1/auth', authRoutes);
 
+// TODO: Mount legacy feature routes after migrating controllers to Prisma
+// import legacyRoutes from './routes/api/v1/index.js';
+// app.use('/api/v1', legacyRoutes);
+
 // Health Check
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });

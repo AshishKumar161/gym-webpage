@@ -7,7 +7,7 @@ import { SessionRepository } from '../repositories/session.repository.js';
 import { Prisma, RoleType } from '@prisma/client';
 import { prisma } from '../server.js';
 
-const JWT_ACCESS_SECRET = process.env.JWT_SECRET || 'supersecret_development_key';
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'supersecret_development_key';
 const ACCESS_TOKEN_EXPIRATION = '15m';
 const REFRESH_TOKEN_EXPIRATION_DAYS = 7;
 
@@ -22,42 +22,64 @@ export class AuthService {
   }
 
   static async register(data: any) {
-    // Check if user already exists
     const existingUser = await UserRepository.findByEmail(data.email);
     if (existingUser) {
       throw new AppError('Email is already in use', 409);
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    // Get the MEMBER role ID
+    // Handle name splitting: frontend sends 'name', validator allows both
+    let firstName = data.firstName;
+    let lastName = data.lastName || '';
+    if (!firstName && data.name) {
+      const parts = data.name.trim().split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.slice(1).join(' ') || '';
+    }
+    if (!firstName) firstName = 'User';
+
     const memberRole = await prisma.role.findUnique({ where: { name: RoleType.MEMBER } });
     if (!memberRole) {
-      throw new AppError('Default role not found', 500);
+      throw new AppError('Default role not found. Please run database seed first.', 500);
     }
 
-    // Create user with default MEMBER role
     const newUser = await UserRepository.create({
       email: data.email,
       passwordHash,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      phone: data.phone,
+      firstName,
+      lastName,
+      phone: data.phone || null,
       branch: data.branchId ? { connect: { id: data.branchId } } : undefined,
       roles: {
         create: [{ roleId: memberRole.id }]
       }
     });
 
-    // Send verification email
-    await this.sendVerificationEmail(newUser.id);
+    // Auto-login: generate tokens
+    const accessToken = this.generateAccessToken(newUser);
+    const refreshToken = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRATION_DAYS);
+
+    await SessionRepository.createSession({
+      userId: newUser.id,
+      refreshToken,
+      expiresAt,
+    });
 
     return {
-      id: newUser.id,
-      email: newUser.email,
-      firstName: newUser.firstName,
-      lastName: newUser.lastName,
+      accessToken,
+      refreshToken,
+      user: {
+        id: newUser.id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        email: newUser.email,
+        name: `${newUser.firstName} ${newUser.lastName}`.trim(),
+        role: 'member',
+        roles: ['MEMBER'],
+      },
     };
   }
 
@@ -94,6 +116,9 @@ export class AuthService {
         id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        role: user.roles[0]?.role.name.toLowerCase() || 'member',
         roles: user.roles.map(r => r.role.name),
       },
     };
@@ -137,6 +162,15 @@ export class AuthService {
     return {
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        role: user.roles[0]?.role.name.toLowerCase() || 'member',
+        roles: user.roles.map(r => r.role.name),
+      },
     };
   }
 

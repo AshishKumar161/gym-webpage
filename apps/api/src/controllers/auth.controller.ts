@@ -4,10 +4,21 @@ import { AuthService } from '../services/auth.service.js';
 export class AuthController {
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-      const user = await AuthService.register(req.body);
+      const result = await AuthService.register(req.body);
+
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+
       res.status(201).json({
         status: 'success',
-        data: { user },
+        data: {
+          accessToken: result.accessToken,
+          user: result.user,
+        },
       });
     } catch (error) {
       next(error);
@@ -76,7 +87,10 @@ export class AuthController {
 
       res.status(200).json({
         status: 'success',
-        data: { accessToken: result.accessToken },
+        data: {
+          accessToken: result.accessToken,
+          user: result.user,
+        },
       });
     } catch (error) {
       next(error);
@@ -109,7 +123,7 @@ export class AuthController {
       }
 
       const profile = await AuthService.getFullProfile(userId);
-      res.status(200).json({ status: 'success', data: profile, message: 'Profile fetched' });
+      res.status(200).json({ status: 'success', data: { user: profile }, message: 'Profile fetched' });
     } catch (error) {
       next(error);
     }
