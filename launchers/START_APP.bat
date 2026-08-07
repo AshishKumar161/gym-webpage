@@ -1,6 +1,5 @@
-@echo off
-:: Navigate to project root directory (one level up from launchers folder)
 cd /d "%~dp0.."
+@echo off
 title A2 ReVamp Gym - Auto Launcher
 color 0A
 cls

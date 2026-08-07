@@ -1,5 +1,5 @@
-@echo off
 cd /d "%~dp0"
+@echo off
 title A2 ReVamp Gym - Auto Launcher
 color 0A
 cls

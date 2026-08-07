@@ -1,5 +1,5 @@
-@echo off
 cd /d "%~dp0"
+@echo off
 TITLE A2 ReVamp Gym - Stop App
 COLOR 0C
 CLS
