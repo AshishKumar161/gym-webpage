@@ -20,8 +20,17 @@ app.use(cors({
   credentials: true,
 }));
 
+import planRoutes from './routes/plan.route.js';
+import memberRoutes from './routes/member.route.js';
+
 // 2. Core Routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/plans', planRoutes);
+app.use('/api/v1/members', memberRoutes);
+
+// TODO: Mount legacy feature routes after migrating controllers to Prisma
+// import legacyRoutes from './routes/api/v1/index.js';
+// app.use('/api/v1', legacyRoutes);
 
 // TODO: Mount legacy feature routes after migrating controllers to Prisma
 // import legacyRoutes from './routes/api/v1/index.js';

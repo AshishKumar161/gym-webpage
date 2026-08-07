@@ -11,7 +11,6 @@ import {
   resendVerificationValidator,
 } from '../validators/auth.validator.js';
 import rateLimit from 'express-rate-limit';
-
 import jwt from 'jsonwebtoken';
 
 const authenticate = (req: any, res: any, next: any) => {
@@ -56,7 +55,7 @@ const passwordLimiter = rateLimit({
 router.post('/register', authLimiter, validateRequest(registerValidator), AuthController.register);
 router.post('/login', authLimiter, validateRequest(loginValidator), AuthController.login);
 router.post('/refresh', AuthController.refresh);
-router.post('/refresh-token', AuthController.refresh); // Frontend compatibility alias
+router.post('/refresh-token', AuthController.refresh); // Frontend compat alias
 router.post('/forgot-password', passwordLimiter, validateRequest(forgotPasswordValidator), AuthController.forgotPassword);
 router.post('/reset-password', passwordLimiter, validateRequest(resetPasswordValidator), AuthController.resetPassword);
 router.get('/verify-email', validateRequest(verifyEmailValidator), AuthController.verifyEmail);

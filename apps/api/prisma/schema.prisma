@@ -9,6 +9,40 @@ datasource db {
 
 // ==========================================
 // ENUMS
+
+enum PlanDuration {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+  CUSTOM
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  FROZEN
+  CANCELLED
+  PENDING
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+}
+
 // ==========================================
 enum RoleType {
   SUPER_ADMIN
@@ -66,14 +100,17 @@ model User {
   lastPasswordChangeAt     DateTime?
 
   // Relations
+  
+  gymId        String?
+  gym          Gym?      @relation(fields: [gymId], references: [id])
+  memberProfile MemberProfile?
+
   roles       UserRole[]
   sessions    Session[]
-  memberships Membership[]
   attendances Attendance[]
   invoices    Invoice[]
 
   // Profiles
-  memberProfile  MemberProfile?
   trainerProfile TrainerProfile?
 
   @@index([email])
@@ -146,6 +183,19 @@ model Session {
   @@map("sessions")
 }
 
+
+model Gym {
+  id              String           @id @default(uuid())
+  name            String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  users           User[]
+  membershipPlans MembershipPlan[]
+
+  @@map("gyms")
+}
+
 model Branch {
   id           String    @id @default(uuid())
   name         String
@@ -159,7 +209,6 @@ model Branch {
   deletedAt    DateTime? @map("deleted_at")
 
   users       User[]
-  plans       Plan[]
   attendances Attendance[]
   invoices    Invoice[]
   inventory   InventoryItem[]
@@ -173,20 +222,7 @@ model Branch {
 // 2. PROFILES & MEMBERSHIPS
 // ==========================================
 
-model MemberProfile {
-  id             String   @id @default(uuid())
-  userId         String   @unique @map("user_id")
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dob            DateTime
-  gender         String
-  heightCm       Decimal? @map("height_cm") @db.Decimal(5, 2)
-  weightKg       Decimal? @map("weight_kg") @db.Decimal(5, 2)
-  medicalNotes   String?  @map("medical_notes")
-  emergencyName  String?  @map("emergency_name")
-  emergencyPhone String?  @map("emergency_phone")
 
-  @@map("member_profiles")
-}
 
 model TrainerProfile {
   id             String  @id @default(uuid())
@@ -199,38 +235,9 @@ model TrainerProfile {
   @@map("trainer_profiles")
 }
 
-model Plan {
-  id           String    @id @default(uuid())
-  branchId     String    @map("branch_id")
-  branch       Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  name         String
-  description  String?
-  price        Decimal   @db.Decimal(10, 2)
-  durationDays Int       @map("duration_days")
-  isActive     Boolean   @default(true) @map("is_active")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  deletedAt    DateTime? @map("deleted_at")
 
-  memberships Membership[]
 
-  @@index([branchId])
-  @@map("plans")
-}
 
-model Membership {
-  id        String             @id @default(uuid())
-  userId    String             @map("user_id")
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planId    String             @map("plan_id")
-  plan      Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
-  startDate DateTime           @map("start_date") @db.Date
-  endDate   DateTime           @map("end_date") @db.Date
-  status    SubscriptionStatus @default(ACTIVE)
-
-  @@index([userId])
-  @@index([status, endDate]) // Phase 7: Fast dashboard queries for expiries
-  @@map("memberships")
-}
 
 // ==========================================
 // 3. BILLING & ATTENDANCE
@@ -324,4 +331,187 @@ model Class {
   capacity Int
 
   @@map("classes")
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// MEMBERSHIP PLANS
+// ═══════════════════════════════════════════════════════════
+
+model MembershipPlan {
+  id              String        @id @default(uuid())
+  gymId           String
+  name            String
+  description     String?
+  duration        PlanDuration
+  durationInDays  Int           // Exact days (30, 90, 180, 365, or custom)
+  price           Float
+  discountedPrice Float?
+  features        String[]      // Array of feature strings
+  maxFreezes      Int           @default(1)
+  freezeDaysLimit Int           @default(7)
+  isActive        Boolean       @default(true)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  gym             Gym           @relation(fields: [gymId], references: [id])
+  memberships     MemberMembership[]
+
+  @@index([gymId])
+  @@map("membership_plans")
+}
+
+// ═══════════════════════════════════════════════════════════
+// MEMBER PROFILE (extends User)
+// ═══════════════════════════════════════════════════════════
+
+model MemberProfile {
+  id                String      @id @default(uuid())
+  gymId             String
+  branchId          String
+  userId            String      @unique
+  memberId          String      @unique  // Human readable: "A2R-0001"
+  gender            Gender?
+  dateOfBirth       DateTime?
+  bloodGroup        BloodGroup?
+  emergencyContact  String?
+  emergencyName     String?
+  address           String?
+  city              String?
+  state             String?
+  pincode           String?
+  weight            Float?      // in kg
+  height            Float?      // in cm
+  medicalConditions String?
+  fitnessGoal       String?
+  joinedAt          DateTime    @default(now())
+  referralCode      String      @unique   // Auto-generated: "JOHN2024"
+  referredBy        String?     // referralCode of the person who referred
+  source            String?     // "WALK_IN", "REFERRAL", "SOCIAL_MEDIA", "WEBSITE", "OTHER"
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  deletedAt         DateTime?
+
+  user              User        @relation(fields: [userId], references: [id])
+  memberships       MemberMembership[]
+  notes             MemberNote[]
+  trainerAssignment TrainerMemberAssignment?
+
+  @@index([gymId])
+  @@index([branchId])
+  @@index([memberId])
+  @@index([referralCode])
+  @@map("member_profiles")
+}
+
+// ═══════════════════════════════════════════════════════════
+// MEMBER MEMBERSHIP (plan assignment)
+// ═══════════════════════════════════════════════════════════
+
+model MemberMembership {
+  id              String           @id @default(uuid())
+  gymId           String
+  memberProfileId String
+  planId          String
+  status          MembershipStatus @default(PENDING)
+  startDate       DateTime
+  endDate         DateTime
+  actualEndDate   DateTime?        // Adjusted for freezes
+  paidAmount      Float
+  discountAmount  Float            @default(0)
+  freezeCount     Int              @default(0)
+  freezeStartDate DateTime?
+  freezeEndDate   DateTime?
+  totalFreezeDays Int              @default(0)
+  cancelledAt     DateTime?
+  cancelReason    String?
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  memberProfile   MemberProfile    @relation(fields: [memberProfileId], references: [id])
+  plan            MembershipPlan   @relation(fields: [planId], references: [id])
+
+  @@index([gymId])
+  @@index([memberProfileId])
+  @@index([status])
+  @@index([endDate])
+  @@map("member_memberships")
+}
+
+// ═══════════════════════════════════════════════════════════
+// MEMBER NOTES
+// ═══════════════════════════════════════════════════════════
+
+model MemberNote {
+  id              String    @id @default(uuid())
+  gymId           String
+  memberProfileId String
+  createdById     String    // Staff who wrote the note
+  content         String
+  isPrivate       Boolean   @default(false)  // Private = only visible to managers+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  memberProfile   MemberProfile @relation(fields: [memberProfileId], references: [id])
+
+  @@index([gymId])
+  @@index([memberProfileId])
+  @@map("member_notes")
+}
+
+// ═══════════════════════════════════════════════════════════
+// TRAINER-MEMBER ASSIGNMENT
+// ═══════════════════════════════════════════════════════════
+
+model TrainerMemberAssignment {
+  id              String    @id @default(uuid())
+  gymId           String
+  memberProfileId String    @unique
+  trainerId       String    // User ID of trainer
+  assignedAt      DateTime  @default(now())
+  assignedById    String    // Manager/Owner who assigned
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  memberProfile   MemberProfile @relation(fields: [memberProfileId], references: [id])
+
+  @@index([gymId])
+  @@index([trainerId])
+  @@map("trainer_member_assignments")
+}
+
+// ═══════════════════════════════════════════════════════════
+// STUB MODELS FOR SERVICES
+// ═══════════════════════════════════════════════════════════
+
+model MemberXP {
+  id            String   @id @default(uuid())
+  gymId         String
+  memberId      String   @unique
+  totalXp       Int      @default(0)
+  level         String   @default("BRONZE")
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("member_xp")
+}
+
+model Referral {
+  id           String   @id @default(uuid())
+  gymId        String
+  referrerId   String
+  referredId   String
+  referralCode String
+  status       String   @default("SIGNED_UP")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("referrals")
 }

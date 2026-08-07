@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { loginSchema } from '../validators/auth.validator.js';
+import { loginValidator, registerValidator } from '../validators/auth.validator.js';
 
 describe('Auth Validators', () => {
   it('should validate a correct login payload', () => {
     const validPayload = {
       body: {
-        email: 'test@a2revampgym.com',
+        email: 'test@example.com',
         password: 'password123',
       }
     };
-    const result = loginSchema.safeParse(validPayload);
+    const result = loginValidator.safeParse(validPayload);
     expect(result.success).toBe(true);
   });
 
@@ -20,7 +20,7 @@ describe('Auth Validators', () => {
         password: 'password123',
       }
     };
-    const result = loginSchema.safeParse(invalidPayload);
+    const result = loginValidator.safeParse(invalidPayload);
     expect(result.success).toBe(false);
   });
 });

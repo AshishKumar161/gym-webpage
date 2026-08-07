@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import app from '../../../server.js';
+import { app } from '../../app.js';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -8,6 +8,18 @@ const prisma = new PrismaClient();
 describe('Auth Integration Tests', () => {
   const testEmail = `testuser_${Date.now()}@example.com`;
   const testPassword = 'Password123!';
+
+  beforeAll(async () => {
+    // Seed MEMBER role
+    await prisma.role.upsert({
+      where: { name: 'MEMBER' },
+      update: {},
+      create: {
+        name: 'MEMBER',
+        description: 'Default member role'
+      }
+    });
+  });
 
   afterAll(async () => {
     // Cleanup test user
@@ -26,7 +38,7 @@ describe('Auth Integration Tests', () => {
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
+    expect(res.body.status).toBe('success');
     expect(res.body.data.user.email).toBe(testEmail);
   });
 
@@ -41,7 +53,7 @@ describe('Auth Integration Tests', () => {
       });
 
     expect(res.status).toBe(409); // Conflict
-    expect(res.body.success).toBe(false);
+    expect(res.body.status).toBe('fail');
   });
 
   it('Should login successfully with correct credentials', async () => {
@@ -53,13 +65,13 @@ describe('Auth Integration Tests', () => {
       });
 
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(res.body.status).toBe('success');
     expect(res.body.data.accessToken).toBeDefined();
     
     // Check if refresh token is in cookies
-    const cookies = res.headers['set-cookie'];
+    const cookies = res.headers['set-cookie'] as unknown as string[];
     expect(cookies).toBeDefined();
-    expect(cookies.some(cookie => cookie.includes('refreshToken='))).toBe(true);
+    expect(cookies.some((cookie: string) => cookie.includes('refreshToken='))).toBe(true);
   });
 
   it('Should fail login with invalid password', async () => {
@@ -71,6 +83,6 @@ describe('Auth Integration Tests', () => {
       });
 
     expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
+    expect(res.body.status).toBe('fail');
   });
 });

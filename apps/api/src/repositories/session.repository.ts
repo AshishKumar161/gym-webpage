@@ -1,5 +1,5 @@
 import { Prisma, Session } from '@prisma/client';
-import { prisma } from '../server.js';
+import prisma from '../config/prisma.js';
 
 export class SessionRepository {
   static async createSession(data: Prisma.SessionUncheckedCreateInput) {

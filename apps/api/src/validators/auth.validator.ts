@@ -12,7 +12,7 @@ export const registerValidator = z.object({
     email: z.string().email('Invalid email address').toLowerCase().trim(),
     password: z.string().min(8, 'Password must be at least 8 characters'),
     name: z.string().min(1, 'Name is required').optional(),
-    firstName: z.string().min(1, 'First name is required').optional(),
+    firstName: z.string().optional(),
     lastName: z.string().optional(),
     phone: z.string().optional(),
     branchId: z.string().uuid('Invalid branch ID').optional(),

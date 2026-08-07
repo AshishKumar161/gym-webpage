@@ -5,7 +5,7 @@ import { AppError } from '../utils/AppError.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { SessionRepository } from '../repositories/session.repository.js';
 import { Prisma, RoleType } from '@prisma/client';
-import { prisma } from '../server.js';
+import prisma from '../config/prisma.js';
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'supersecret_development_key';
 const ACCESS_TOKEN_EXPIRATION = '15m';
@@ -27,6 +27,14 @@ export class AuthService {
       throw new AppError('Email is already in use', 409);
     }
 
+    // Split name if provided and firstName is missing
+    if (data.name && !data.firstName) {
+      const parts = data.name.trim().split(' ');
+      data.firstName = parts[0];
+      data.lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+    }
+
+    // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     // Handle name splitting: frontend sends 'name', validator allows both
@@ -47,9 +55,9 @@ export class AuthService {
     const newUser = await UserRepository.create({
       email: data.email,
       passwordHash,
-      firstName,
-      lastName,
-      phone: data.phone || null,
+      firstName: data.firstName || '',
+      lastName: data.lastName || '',
+      phone: data.phone,
       branch: data.branchId ? { connect: { id: data.branchId } } : undefined,
       roles: {
         create: [{ roleId: memberRole.id }]
@@ -58,6 +66,18 @@ export class AuthService {
 
     // Auto-login: generate tokens
     const accessToken = this.generateAccessToken(newUser);
+    const refreshToken = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRATION_DAYS);
+
+    await SessionRepository.createSession({
+      userId: newUser.id,
+      refreshToken,
+      expiresAt,
+    });
+
+    // Auto-login after registration
+    const accessToken = this.generateAccessToken({ ...newUser, roles: [{ role: memberRole }] });
     const refreshToken = uuidv4();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRATION_DAYS);
@@ -169,7 +189,7 @@ export class AuthService {
         email: user.email,
         name: `${user.firstName} ${user.lastName}`.trim(),
         role: user.roles[0]?.role.name.toLowerCase() || 'member',
-        roles: user.roles.map(r => r.role.name),
+        roles: user.roles.map((r: any) => r.role.name),
       },
     };
   }

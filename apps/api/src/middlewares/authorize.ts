@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { prisma } from '../server.js';
+import prisma from '../config/prisma.js';
 import { RoleType } from '@prisma/client';
 
 /**

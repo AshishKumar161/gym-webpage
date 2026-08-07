@@ -107,6 +107,28 @@ function getModalHTML() {
       <button type="button" class="auth-forgot-link" id="auth-back-to-login">← Back to Login</button>
     </form>
 
+    <!-- ── Reset Password Form (From Email Link) ── -->
+    <form id="auth-form-reset" class="auth-form" style="display:none;" novalidate>
+      <h2 class="auth-form-title">Set New Password</h2>
+      <p class="auth-form-sub">Enter your new password below</p>
+      
+      <input type="hidden" id="reset-token" name="token" />
+
+      <div class="auth-field">
+        <label for="reset-password">New Password</label>
+        <input type="password" id="reset-password" name="password" placeholder="Min 8 chars, 1 uppercase, 1 number" required />
+      </div>
+      <div class="auth-field">
+        <label for="reset-confirm">Confirm Password</label>
+        <input type="password" id="reset-confirm" name="confirm" placeholder="Re-enter password" required />
+      </div>
+
+      <button type="submit" class="btn btn-primary auth-submit-btn" id="btn-reset">
+        <span class="btn-text">Update Password</span>
+        <span class="btn-spinner" aria-hidden="true" style="display:none;">⏳</span>
+      </button>
+    </form>
+
   </div>
 </div>`;
 }
@@ -248,10 +270,17 @@ function checkPasswordStrength(password) {
 // ─── Tab / Form Switching ──────────────────────────────────────────────────────
 
 function showForm(tab) {
-  ['login', 'register', 'forgot'].forEach(t => {
+  ['login', 'register', 'forgot', 'reset'].forEach(t => {
     const form = qs(`#auth-form-${t}`);
     if (form) form.style.display = t === tab ? 'block' : 'none';
   });
+  
+  // Hide tabs entirely if we're on the reset screen
+  const authTabs = qs('.auth-tabs');
+  if (authTabs) {
+    authTabs.style.display = tab === 'reset' ? 'none' : 'flex';
+  }
+  
   clearStatus();
 }
 
@@ -293,6 +322,30 @@ export function initAuthModal() {
   // Inject modal HTML if not already present
   if (!qs('#auth-modal')) {
     document.body.insertAdjacentHTML('beforeend', getModalHTML());
+  }
+
+  // Handle URL Params for Email Verification and Password Reset
+  const urlParams = new URLSearchParams(window.location.search);
+  const action = urlParams.get('action');
+  
+  if (action === 'verify') {
+    const success = urlParams.get('success') === 'true';
+    openAuthModal('login');
+    if (success) {
+      showStatus('Email verified successfully! You may now log in.', 'success');
+    } else {
+      showStatus('Email verification failed. The link may have expired or is invalid.', 'error');
+    }
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (action === 'reset') {
+    const token = urlParams.get('token');
+    if (token) {
+      openAuthModal('login'); // To open the modal wrapper
+      showForm('reset'); // To force show the reset form specifically
+      const tokenInput = qs('#reset-token');
+      if (tokenInput) tokenInput.value = token;
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }
 
   // Tab switching
@@ -381,6 +434,31 @@ export function initAuthModal() {
       showStatus(err.message || 'Request failed. Please try again.');
     } finally {
       setLoading('btn-forgot', false);
+    }
+  });
+
+  // ── Reset Password Submit ──
+  qs('#auth-form-reset')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearStatus();
+    const token = qs('#reset-token').value;
+    const password = qs('#reset-password').value;
+    const confirm = qs('#reset-confirm').value;
+    
+    if (!password || !confirm) return showStatus('Please enter your new password.');
+    if (password !== confirm) return showStatus('Passwords do not match.');
+    
+    setLoading('btn-reset', true);
+    try {
+      // Need to import resetPassword from utils/auth.js above
+      const { resetPassword } = await import('../../utils/auth.js');
+      await resetPassword(token, password);
+      showStatus('Password updated successfully! Please login with your new password.', 'success');
+      setTimeout(() => activateTab('login'), 2000);
+    } catch (err) {
+      showStatus(err.message || 'Failed to update password. The link might be expired.');
+    } finally {
+      setLoading('btn-reset', false);
     }
   });
 }

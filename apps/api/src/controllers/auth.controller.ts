@@ -5,12 +5,12 @@ export class AuthController {
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await AuthService.register(req.body);
-
+      
       res.cookie('refreshToken', result.refreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
       res.status(201).json({
@@ -87,7 +87,7 @@ export class AuthController {
 
       res.status(200).json({
         status: 'success',
-        data: {
+        data: { 
           accessToken: result.accessToken,
           user: result.user,
         },
@@ -148,12 +148,13 @@ export class AuthController {
   }
 
   static async verifyEmail(req: Request, res: Response, next: NextFunction) {
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     try {
       const token = req.query.token as string;
       await AuthService.verifyEmail(token);
-      res.status(200).json({ status: 'success', message: 'Email verified successfully' });
+      res.redirect(`${clientUrl}/?action=verify&success=true`);
     } catch (error) {
-      next(error);
+      res.redirect(`${clientUrl}/?action=verify&success=false`);
     }
   }
 
